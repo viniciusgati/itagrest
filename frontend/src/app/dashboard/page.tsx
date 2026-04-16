@@ -1,0 +1,255 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+import { TrendingUp, Users, DollarSign, Package, ArrowUpRight, ArrowDownRight, ShieldCheck, UtensilsCrossed, RotateCcw, Sun, Moon } from 'lucide-react'
+import axios from 'axios'
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell } from 'recharts'
+import Link from 'next/link'
+import { useTheme } from '../theme-provider'
+
+const API_STATS = 'http://localhost:8000/api/v1/vendas/stats'
+
+export default function DashboardPage() {
+  const { isDark, toggleTheme } = useTheme()
+  const [resumo, setResumo] = useState<any>(null)
+  const [faturamento, setFaturamento] = useState<any[]>([])
+  const [topProdutos, setTopProdutos] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [empresaConfigurada, setEmpresaConfigurada] = useState(true)
+
+  const fetchData = async () => {
+    try {
+      const resStatus = await axios.get('http://localhost:8000/api/v1/empresa/status')
+      setEmpresaConfigurada(resStatus.data.configurado)
+
+      const [resResumo, resFat, resTop] = await Promise.all([
+        axios.get(`${API_STATS}/resumo`),
+        axios.get(`${API_STATS}/faturamento-diario`),
+        axios.get(`${API_STATS}/top-produtos`)
+      ])
+      setResumo(resResumo.data)
+      setFaturamento(resFat.data)
+      setTopProdutos(resTop.data)
+    } catch (err) { console.error(err) }
+    finally { setLoading(false) }
+  }
+
+  useEffect(() => {
+    fetchData()
+  }, [])
+
+  if (loading) return (
+    <div className="min-h-screen bg-slate-100 dark:bg-slate-900 p-10 flex items-center justify-center transition-colors">
+      <div className="flex flex-col items-center gap-4">
+        <TrendingUp className="w-12 h-12 text-brand-600 animate-bounce" />
+        <p className="font-black text-slate-400 uppercase tracking-widest text-[10px]">Carregando Inteligência...</p>
+      </div>
+    </div>
+  )
+
+  return (
+    <div className="min-h-screen bg-slate-100 dark:bg-slate-900 transition-colors duration-300 p-6 md:p-10 flex flex-col gap-10">
+      
+      {!empresaConfigurada && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-slate-900/40 backdrop-blur-md animate-in fade-in duration-500">
+          <div className="bg-white dark:bg-slate-800 rounded-[3rem] p-10 max-w-lg w-full shadow-2xl border border-slate-100 dark:border-slate-700 text-center space-y-8 animate-in zoom-in-95 duration-500">
+            <div className="w-20 h-20 bg-brand-50 dark:bg-brand-900/20 rounded-3xl flex items-center justify-center mx-auto text-brand-600">
+              <ShieldCheck className="w-10 h-10" />
+            </div>
+            <div className="space-y-2">
+              <h2 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">Ative seu iTagREST</h2>
+              <p className="text-slate-500 dark:text-slate-400 leading-relaxed font-medium">
+                Seu setup administrativo está pronto! Agora precisamos configurar seus dados fiscais e o certificado para emitir NFC-e.
+              </p>
+            </div>
+            <div className="flex flex-col gap-4">
+              <button 
+                onClick={() => window.location.href = '/wizard-fiscal'}
+                className="w-full bg-slate-900 dark:bg-brand-600 hover:bg-slate-800 dark:hover:bg-brand-700 text-white font-black py-5 rounded-2xl transition-all shadow-xl shadow-slate-200 dark:shadow-none flex items-center justify-center gap-3"
+              >
+                Configurar Empresa e Fiscal <ArrowUpRight className="w-5 h-5" />
+              </button>
+              <button 
+                onClick={() => setEmpresaConfigurada(true)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 text-xs font-bold uppercase tracking-widest transition-colors"
+              >
+                Pular por agora (Apenas Visualização)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="max-w-7xl mx-auto w-full space-y-10">
+        
+        {/* Header */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-4xl font-black text-slate-900 dark:text-white tracking-tight">Painel de Controle</h1>
+            <p className="text-slate-500 dark:text-slate-400 font-medium">Bem-vindo ao iTagREST Intelligence.</p>
+          </div>
+          
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={toggleTheme}
+              className="w-12 h-12 bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-50 transition-all active:scale-95"
+            >
+              {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+            </button>
+
+            <div className="bg-white dark:bg-slate-800 p-2 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 flex items-center gap-2 text-slate-900 dark:text-white">
+              <span className="text-xs font-black text-slate-400 uppercase tracking-widest px-4">Período: 7 dias</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Ações Rápidas */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <QuickAction 
+            href="/cardapio" 
+            title="Gestão do Cardápio" 
+            desc="Cadastrar ou Importar XML" 
+            icon={<Package className="w-5 h-5" />} 
+            color="bg-brand-600"
+          />
+          <QuickAction 
+            href="/pdv" 
+            title="Terminal de Vendas" 
+            desc="Abrir Mesas e Comandas" 
+            icon={<UtensilsCrossed className="w-5 h-5" />} 
+            color="bg-emerald-600"
+          />
+          <QuickAction 
+            href="/vendas" 
+            title="Monitor de Operações" 
+            desc="Histórico e Auditoria" 
+            icon={<ShieldCheck className="w-5 h-5" />} 
+            color="bg-slate-900 dark:bg-slate-700"
+          />
+          <QuickAction 
+            href="/wizard-fiscal" 
+            title="Configuração Fiscal" 
+            desc="Revisar Dados da Empresa" 
+            icon={<RotateCcw className="w-5 h-5" />} 
+            color="bg-amber-500"
+          />
+        </div>
+
+        {/* Widgets de Resumo */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          <StatCard 
+            title="Faturamento Hoje" 
+            value={`R$ ${resumo?.total_faturado?.toFixed(2) || '0,00'}`} 
+            trend="+12.5%"
+            icon={<DollarSign className="w-6 h-6" />}
+            color="bg-emerald-500"
+          />
+          <StatCard 
+            title="Vendas Realizadas" 
+            value={resumo?.qtd_vendas || 0} 
+            trend="+5.2%"
+            icon={<Users className="w-6 h-6" />}
+            color="bg-brand-500"
+          />
+          <StatCard 
+            title="Ticket Médio" 
+            value={`R$ ${resumo?.ticket_medio?.toFixed(2) || '0,00'}`} 
+            trend="-2.1%"
+            icon={<TrendingUp className="w-6 h-6" />}
+            color="bg-violet-500"
+          />
+        </div>
+
+        {/* Gráfico de Faturamento */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <div className="lg:col-span-2 bg-white dark:bg-slate-800 p-10 rounded-[3rem] shadow-xl shadow-slate-200/40 dark:shadow-none border border-slate-100 dark:border-slate-700 flex flex-col gap-6">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Faturamento Diário</h3>
+              <div className="flex items-center gap-2 text-xs font-bold text-slate-400">
+                <span className="w-3 h-3 rounded-full bg-brand-500"></span> Total Processado
+              </div>
+            </div>
+            <div className="h-80 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={faturamento}>
+                  <defs>
+                    <linearGradient id="colorTotal" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#6b8ef9" stopOpacity={0.3}/>
+                      <stop offset="95%" stopColor="#6b8ef9" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={isDark ? "#334155" : "#f1f5f9"} />
+                  <XAxis dataKey="dia" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 10, fontWeight: 700}} dy={10} />
+                  <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 10, fontWeight: 700}} />
+                  <Tooltip 
+                    contentStyle={{ borderRadius: '20px', border: 'none', boxShadow: '0 20px 50px rgba(0,0,0,0.1)', padding: '15px' }}
+                    itemStyle={{ fontWeight: 800, color: '#1e293b' }}
+                  />
+                  <Area type="monotone" dataKey="total" stroke="#6b8ef9" strokeWidth={4} fillOpacity={1} fill="url(#colorTotal)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* Ranking de Produtos */}
+          <div className="bg-white dark:bg-slate-800 p-10 rounded-[3rem] shadow-xl shadow-slate-200/40 dark:shadow-none border border-slate-100 dark:border-slate-700 flex flex-col gap-8 text-slate-900 dark:text-white">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xl font-black uppercase tracking-tight">Mais Vendidos</h3>
+              <Package className="text-brand-500 w-6 h-6" />
+            </div>
+            <div className="space-y-6">
+              {topProdutos.map((p, i) => (
+                <div key={i} className="flex items-center justify-between group">
+                  <div className="flex items-center gap-4">
+                    <span className="text-2xl font-black text-slate-200 dark:text-slate-700 group-hover:text-brand-500 transition-colors">0{i+1}</span>
+                    <div>
+                      <p className="font-bold text-sm leading-tight">{p.produto}</p>
+                      <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">{p.qtd} unidades</p>
+                    </div>
+                  </div>
+                  <div className="h-1.5 w-16 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+                    <div className="h-full bg-brand-500" style={{ width: `${(p.qtd / (topProdutos[0]?.qtd || 1)) * 100}%` }}></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <button className="mt-auto w-full py-4 bg-slate-50 dark:bg-slate-700/50 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] transition-all">Ver Relatório Completo</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function StatCard({ title, value, icon, color, trend }: any) {
+  const isPositive = trend.startsWith('+')
+  return (
+    <div className="bg-white dark:bg-slate-800 p-8 rounded-[2.5rem] shadow-xl shadow-slate-200/40 dark:shadow-none border border-slate-100 dark:border-slate-700 flex items-center justify-between group hover:border-brand-200 transition-all">
+      <div className="space-y-2">
+        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{title}</p>
+        <h4 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">{value}</h4>
+        <div className={`flex items-center gap-1 text-[10px] font-black uppercase ${isPositive ? 'text-emerald-500' : 'text-rose-500'}`}>
+          {isPositive ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
+          {trend} este mês
+        </div>
+      </div>
+      <div className={`w-16 h-16 ${color} rounded-3xl flex items-center justify-center text-white shadow-lg group-hover:scale-110 transition-transform`}>
+        {icon}
+      </div>
+    </div>
+  )
+}
+
+function QuickAction({ href, title, desc, icon, color }: any) {
+  return (
+    <Link href={href} className="group bg-white dark:bg-slate-800 p-6 rounded-[2rem] border border-slate-100 dark:border-slate-700 shadow-xl shadow-slate-200/30 dark:shadow-none hover:border-brand-300 transition-all flex items-center gap-5">
+      <div className={`w-14 h-14 ${color} rounded-2xl flex items-center justify-center text-white shadow-lg group-hover:scale-110 transition-transform`}>
+        {icon}
+      </div>
+      <div>
+        <h4 className="font-black text-slate-900 dark:text-white leading-tight group-hover:text-brand-600 transition-colors">{title}</h4>
+        <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest mt-0.5">{desc}</p>
+      </div>
+    </Link>
+  )
+}

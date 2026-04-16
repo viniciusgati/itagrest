@@ -1,0 +1,36 @@
+schema: 1
+story: '0.US000'
+story_title: 'Setup Inicial do Administrador'
+gate: PASS
+status_reason: 'Bootstrap endpoint atomic shutdown implemented and verified via integration tests. UX instant feedback with debouncing correctly applied.'
+reviewer: 'Quinn (Test Architect)'
+updated: '2026-04-15T15:30:00Z'
+
+quality_score: 100
+
+evidence:
+  tests_reviewed: 10
+  risks_identified: 3
+  trace:
+    ac_covered: [1, 2, 3, 4, 5]
+    ac_gaps: []
+
+nfr_validation:
+  security:
+    status: PASS
+    notes: 'RISK-SEC-01 mitigated. Integration test (test_setup_flow_and_security) confirms 400 response for setup-admin after first use.'
+  performance:
+    status: PASS
+    notes: 'Debouncing (300ms) implemented in frontend password validation to reduce re-renders.'
+  reliability:
+    status: PASS
+    notes: 'Atomic database check for user existence before bootstrap execution.'
+  maintainability:
+    status: PASS
+    notes: 'Clear separation between setup endpoints and regular auth logic.'
+
+recommendations:
+  immediate: []
+  future:
+    - action: 'Implement rate limiting for the setup-admin endpoint if exposed publicly'
+      refs: ['app/api/v1/endpoints/setup.py']

@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { User, Mail, Lock, CheckCircle2, Loader2 } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { User, Mail, Lock, CheckCircle2, Loader2, AlertCircle } from 'lucide-react'
 import axios from 'axios'
 
 export default function SetupAdmin() {
@@ -15,21 +15,37 @@ export default function SetupAdmin() {
   
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [validationError, setValidationError] = useState('')
   const [success, setSuccess] = useState(false)
+
+  // Debouncing para validação instantânea de senha
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (formData.password && formData.confirm_password) {
+        if (formData.password !== formData.confirm_password) {
+          setValidationError('As senhas não coincidem.')
+        } else if (formData.password.length < 8) {
+          setValidationError('A senha deve ter pelo menos 8 caracteres.')
+        } else {
+          setValidationError('')
+        }
+      } else {
+        setValidationError('')
+      }
+    }, 300)
+
+    return () => clearTimeout(timer)
+  }, [formData.password, formData.confirm_password])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    
+    if (validationError) return
+
     setLoading(true)
     setError('')
 
-    if (formData.password !== formData.confirm_password) {
-      setError('As senhas não coincidem.')
-      setLoading(false)
-      return
-    }
-
     try {
-      // Endpoint que criamos no Passo do Backend
       await axios.post('http://localhost:8000/api/v1/setup/setup-admin', {
         full_name: formData.full_name,
         username: formData.username,
@@ -38,7 +54,6 @@ export default function SetupAdmin() {
       })
       
       setSuccess(true)
-      // Redirecionamento futuro para Login/Dashboard
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Erro ao configurar administrador.')
     } finally {
@@ -81,8 +96,16 @@ export default function SetupAdmin() {
 
         <form onSubmit={handleSubmit} className="space-y-5">
           {error && (
-            <div className="bg-red-50 text-red-600 p-4 rounded-2xl text-sm font-medium border border-red-100 animate-pulse">
+            <div className="bg-red-50 text-red-600 p-4 rounded-2xl text-sm font-medium border border-red-100 animate-pulse flex items-center gap-2">
+              <AlertCircle className="w-5 h-5" />
               {error}
+            </div>
+          )}
+
+          {validationError && (
+            <div className="bg-amber-50 text-amber-600 p-4 rounded-2xl text-sm font-medium border border-amber-100 flex items-center gap-2 animate-in fade-in slide-in-from-top-2">
+              <AlertCircle className="w-5 h-5" />
+              {validationError}
             </div>
           )}
 
