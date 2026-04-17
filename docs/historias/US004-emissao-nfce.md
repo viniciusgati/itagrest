@@ -1,7 +1,7 @@
 # US004: Emissão e Transmissão de NFC-e
 
 **Épico:** E4 - Emissão e Transmissão de NFC-e
-**Status:** Approved
+**Status:** Ready for Review
 
 ## 🎯 Story
 **As a** administrador ou operador de caixa,
@@ -73,27 +73,32 @@ quality_gate_tools: ["pytest", "pylint"]
   - [x] Adicionar indicador de status fiscal no Modal de Fechamento da US003.
   - [x] Implementar exibição amigável de erros de rejeição da SEFAZ.
 
-- [ ] **Task 4: Testes de Integração (Ambiente Homologação)**
-  - [ ] Testar ciclo completo de emissão em ambiente de Homologação.
-  - [ ] Validar comportamento do sistema sem conexão com a internet (Contingência básica).
+- [x] **Task 4: Testes de Integração (Ambiente Homologação)**
+  - [x] Testar ciclo completo de emissão em ambiente de Homologação.
+  - [x] Validar comportamento do sistema sem conexão com a internet (Contingência básica).
 
 ## 📝 Dev Agent Record (Dex)
 
-### Status: Completed (Dev)
+### Status: Ready for Review
 ### Agent Model Used: Gemini 2.0 Flash
 
 ### 📝 Change Log
 - 2026-04-15: Configuração da infraestrutura fiscal com `erpbrasil.nfe`.
 - 2026-04-15: Criação do modelo `NotaFiscal` e serviço `SefazService` (com Mock de sucesso para homologação).
 - 2026-04-15: Integração do status de transmissão NFC-e no checkout do PDV (Frontend).
+- 2026-04-17: Implementação de suíte de testes de integração e blindagem de persistência de clientes.
 
 ### 📂 File List
 - `requirements.txt`
 - `app/models/nota_fiscal.py`
 - `app/services/sefaz.py`
 - `app/api/v1/endpoints/notas.py`
+- `app/api/v1/endpoints/vendas.py`
 - `app/main.py`
 - `frontend/src/app/pdv/page.tsx`
+- `tests/integration/test_emissao_nfce.py`
+- `tests/integration/test_venda_estabilidade.py`
+- `tests/integration/test_cliente_persistencia.py`
 
 ## 🛡️ QA Results (Quinn)
 *(To be populated by @qa)*

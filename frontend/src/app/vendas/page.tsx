@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { ArrowLeft, Search, FileText, Code, CheckCircle2, XCircle, Clock, ExternalLink, Loader2 } from 'lucide-react'
+import { ArrowLeft, Search, FileText, Code, CheckCircle2, XCircle, Clock, ExternalLink, Loader2, Printer } from 'lucide-react'
 import axios from 'axios'
 import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -27,11 +27,15 @@ export default function VendasMonitorPage() {
     fetchVendas()
   }, [])
 
-  const handleViewXml = (vendaId: int) => {
+  const handleViewXml = (vendaId: number) => {
     window.open(`${API_VENDAS}/${vendaId}/log-xml`, '_blank')
   }
 
-  const handleViewLog = async (vendaId: int) => {
+  const handlePrint = (vendaId: number) => {
+    window.open(`http://localhost:8000/api/v1/notas/${vendaId}/imprimir`, '_blank')
+  }
+
+  const handleViewLog = async (vendaId: number) => {
     try {
       const res = await axios.get(`${API_VENDAS}/${vendaId}/log-texto`)
       setLogView(res.data.log)
@@ -40,7 +44,8 @@ export default function VendasMonitorPage() {
 
   const filteredVendas = vendas.filter(v => 
     v.id.toString().includes(searchTerm) || 
-    v.mesa.toString().includes(searchTerm)
+    v.mesa.toString().includes(searchTerm) ||
+    v.cliente?.nome?.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
   return (
@@ -66,8 +71,8 @@ export default function VendasMonitorPage() {
             <Search className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
             <input 
               type="text" 
-              placeholder="Buscar por Mesa ou ID da Venda..."
-              className="w-full pl-14 pr-6 py-4 bg-slate-50 dark:bg-slate-900 rounded-2xl border-none focus:ring-4 focus:ring-brand-100 dark:focus:ring-brand-900/20 outline-none font-medium transition-all"
+              placeholder="Buscar por Mesa, ID ou Cliente..."
+              className="w-full pl-14 pr-6 py-4 bg-slate-50 dark:bg-slate-900 dark:text-white rounded-2xl border-none focus:ring-4 focus:ring-brand-100 dark:focus:ring-brand-900/30 outline-none font-medium transition-all"
               value={searchTerm}
               onChange={e => setSearch(e.target.value)}
             />
@@ -84,6 +89,7 @@ export default function VendasMonitorPage() {
               <tr className="bg-slate-900 dark:bg-slate-950 text-white uppercase text-[10px] font-black tracking-[0.2em]">
                 <th className="py-6 px-8">ID / Data</th>
                 <th className="py-6 px-8">Mesa</th>
+                <th className="py-6 px-8">Cliente</th>
                 <th className="py-6 px-8">Total</th>
                 <th className="py-6 px-8">Pagamento</th>
                 <th className="py-6 px-8 text-center">Status</th>
@@ -103,6 +109,10 @@ export default function VendasMonitorPage() {
                     </span>
                   </td>
                   <td className="py-6 px-8">
+                    <p className="font-bold text-slate-900 dark:text-white text-sm">{v.cliente?.nome || 'CONSUMIDOR'}</p>
+                    <p className="text-[10px] text-slate-400 font-medium">{v.cliente?.documento || 'Sem identificação'}</p>
+                  </td>
+                  <td className="py-6 px-8">
                     <span className="font-black text-slate-900 dark:text-white">R$ {parseFloat(v.total).toFixed(2)}</span>
                   </td>
                   <td className="py-6 px-8">
@@ -113,6 +123,12 @@ export default function VendasMonitorPage() {
                   </td>
                   <td className="py-6 px-8 text-right">
                     <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button 
+                        onClick={() => handlePrint(v.id)}
+                        className="p-3 bg-slate-50 dark:bg-slate-900 hover:bg-slate-800 hover:text-white text-slate-600 dark:text-slate-400 rounded-xl transition-all shadow-sm" title="Imprimir DANFE"
+                      >
+                        <Printer className="w-4 h-4" />
+                      </button>
                       <button 
                         onClick={() => handleViewLog(v.id)}
                         className="p-3 bg-slate-50 dark:bg-slate-900 hover:bg-brand-600 hover:text-white text-slate-600 dark:text-slate-400 rounded-xl transition-all shadow-sm" title="Ver Logs"
@@ -145,18 +161,18 @@ export default function VendasMonitorPage() {
         {logView && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setLogView(null)} className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" />
-            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="relative bg-white w-full max-w-2xl rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="relative bg-white dark:bg-slate-800 w-full max-w-2xl rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
               <div className="p-8 bg-slate-900 text-white flex items-center justify-between">
                 <h3 className="text-xl font-black uppercase tracking-tight">Detalhes do Log</h3>
                 <button onClick={() => setLogView(null)} className="p-2 hover:bg-white/10 rounded-full transition-all text-white"><XCircle className="w-6 h-6" /></button>
               </div>
-              <div className="p-8 overflow-y-auto bg-slate-50 flex-1">
-                <pre className="font-mono text-xs text-slate-600 leading-relaxed whitespace-pre-wrap bg-white p-6 rounded-2xl border border-slate-200 shadow-inner">
+              <div className="p-8 overflow-y-auto bg-slate-50 dark:bg-slate-900/50 flex-1">
+                <pre className="font-mono text-xs text-slate-600 dark:text-slate-400 leading-relaxed whitespace-pre-wrap bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-inner">
                   {logView}
                 </pre>
               </div>
-              <div className="p-6 border-t border-slate-100 flex justify-end">
-                <button onClick={() => setLogView(null)} className="px-8 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-slate-200 transition-all">Fechar</button>
+              <div className="p-6 border-t border-slate-100 dark:border-slate-700 flex justify-end">
+                <button onClick={() => setLogView(null)} className="px-8 py-3 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-slate-200 dark:hover:bg-slate-600 transition-all">Fechar</button>
               </div>
             </motion.div>
           </div>
@@ -168,10 +184,10 @@ export default function VendasMonitorPage() {
 
 function StatusBadge({ status }: { status: string }) {
   const configs: any = {
-    'PAGA': { icon: <CheckCircle2 className="w-3 h-3" />, color: 'bg-emerald-50 text-emerald-600', label: 'Finalizada' },
-    'AGUARDANDO_PAGAMENTO': { icon: <Clock className="w-3 h-3" />, color: 'bg-amber-50 text-amber-600', label: 'Aguardando PIX' },
-    'ABERTA': { icon: <Clock className="w-3 h-3" />, color: 'bg-blue-50 text-blue-600', label: 'Em Atendimento' },
-    'CANCELADA': { icon: <XCircle className="w-3 h-3" />, color: 'bg-rose-50 text-rose-600', label: 'Cancelada' },
+    'PAGA': { icon: <CheckCircle2 className="w-3 h-3" />, color: 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600', label: 'Finalizada' },
+    'AGUARDANDO_PAGAMENTO': { icon: <Clock className="w-3 h-3" />, color: 'bg-amber-50 dark:bg-amber-900/20 text-amber-600', label: 'Aguardando PIX' },
+    'ABERTA': { icon: <Clock className="w-3 h-3" />, color: 'bg-blue-50 dark:bg-blue-900/20 text-blue-600', label: 'Em Atendimento' },
+    'CANCELADA': { icon: <XCircle className="w-3 h-3" />, color: 'bg-rose-50 dark:bg-rose-900/20 text-rose-600', label: 'Cancelada' },
   }
   const config = configs[status] || configs['ABERTA']
   return (

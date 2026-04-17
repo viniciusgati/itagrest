@@ -104,32 +104,39 @@ export default function DashboardPage() {
         </div>
 
         {/* Ações Rápidas */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
           <QuickAction 
             href="/cardapio" 
-            title="Gestão do Cardápio" 
-            desc="Cadastrar ou Importar XML" 
+            title="Cardápio" 
+            desc="Produtos e Preços" 
             icon={<Package className="w-5 h-5" />} 
             color="bg-brand-600"
           />
           <QuickAction 
+            href="/clientes" 
+            title="Clientes" 
+            desc="Cadastro Nominal" 
+            icon={<Users className="w-5 h-5" />} 
+            color="bg-violet-600"
+          />
+          <QuickAction 
             href="/pdv" 
-            title="Terminal de Vendas" 
-            desc="Abrir Mesas e Comandas" 
+            title="Terminal PDV" 
+            desc="Vendas em Aberto" 
             icon={<UtensilsCrossed className="w-5 h-5" />} 
             color="bg-emerald-600"
           />
           <QuickAction 
             href="/vendas" 
-            title="Monitor de Operações" 
-            desc="Histórico e Auditoria" 
+            title="Monitor" 
+            desc="Histórico e Fiscal" 
             icon={<ShieldCheck className="w-5 h-5" />} 
             color="bg-slate-900 dark:bg-slate-700"
           />
           <QuickAction 
             href="/wizard-fiscal" 
-            title="Configuração Fiscal" 
-            desc="Revisar Dados da Empresa" 
+            title="Fiscal" 
+            desc="Empresa e PFX" 
             icon={<RotateCcw className="w-5 h-5" />} 
             color="bg-amber-500"
           />

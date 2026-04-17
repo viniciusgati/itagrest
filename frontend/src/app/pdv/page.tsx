@@ -17,6 +17,7 @@ export default function PDVPage() {
   const [mesas, setMesas] = useState<any[]>([])
   const [produtos, setProdutos] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [selectingMesa, setSelectingMesa] = useState<number | null>(null)
 
   const fetchMesas = async () => {
     try {
@@ -39,6 +40,7 @@ export default function PDVPage() {
   }, [])
 
   const handleSelectMesa = (mesa: any) => {
+    setSelectingMesa(mesa.mesa)
     router.push(`/pdv/comanda/${mesa.mesa}`)
   }
 
@@ -65,10 +67,13 @@ export default function PDVPage() {
         {mesas.map((m) => (
           <motion.button
             key={m.mesa}
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
+            disabled={selectingMesa !== null}
+            whileHover={selectingMesa === null ? { scale: 1.05 } : {}}
+            whileTap={selectingMesa === null ? { scale: 0.95 } : {}}
             onClick={() => handleSelectMesa(m)}
-            className={`h-40 rounded-[2.5rem] border-4 flex flex-col items-center justify-center gap-2 transition-all shadow-xl ${
+            className={`h-40 rounded-[2.5rem] border-4 flex flex-col items-center justify-center gap-2 transition-all shadow-xl relative ${
+              selectingMesa === m.mesa ? 'opacity-50 ring-4 ring-brand-500 ring-offset-4 dark:ring-offset-slate-900' : ''
+            } ${
               m.status === 'LIVRE' 
                 ? 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-400 hover:border-brand-500' 
                 : m.status === 'EM_ATENDIMENTO'
@@ -76,6 +81,11 @@ export default function PDVPage() {
                 : 'bg-amber-500 border-amber-400 text-white shadow-amber-900/20'
             }`}
           >
+            {selectingMesa === m.mesa && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black/5 rounded-[2.5rem]">
+                <Loader2 className="w-8 h-8 animate-spin text-brand-500" />
+              </div>
+            )}
             <span className="text-[10px] font-black uppercase tracking-tighter opacity-60">Mesa</span>
             <span className="text-5xl font-black leading-none">{m.mesa}</span>
             {m.total > 0 && <span className="text-sm font-bold bg-black/20 px-3 py-1 rounded-full">R$ {m.total}</span>}

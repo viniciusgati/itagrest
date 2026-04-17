@@ -42,7 +42,7 @@ def emitir_nota(venda_id: int, db: Session = Depends(get_db)):
         return nota
     except Exception as e:
         raise HTTPException(
-            status_code=500, 
+            status_code=400, 
             detail=f"Erro na transmissão SEFAZ: {str(e)}"
         )
 

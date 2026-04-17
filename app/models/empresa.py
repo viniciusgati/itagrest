@@ -34,4 +34,7 @@ class Empresa(Base):
     csc_token = Column(String(100)) # Token do Código de Segurança do Contribuinte
     csc_id = Column(String(10))     # ID do Token (ex: 000001)
     
+    # Recebimentos
+    pix_chave = Column(String(100), nullable=True) # Chave PIX para pagamentos
+    
     configurado = Column(Boolean, default=False)

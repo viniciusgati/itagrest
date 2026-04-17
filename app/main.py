@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from app.api.v1.endpoints import setup, auth, empresa, produtos, vendas, notas
+from app.api.v1.endpoints import setup, auth, empresa, produtos, vendas, notas, clientes
 from app.db.session import engine, Base
 import os
 
@@ -35,5 +35,6 @@ app.include_router(setup.router, prefix="/api/v1/setup", tags=["Setup Inicial"])
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["Autenticação"])
 app.include_router(empresa.router, prefix="/api/v1/empresa", tags=["Configuração Fiscal"])
 app.include_router(produtos.router, prefix="/api/v1/produtos", tags=["Cardápio"])
+app.include_router(clientes.router, prefix="/api/v1/clientes", tags=["Clientes"])
 app.include_router(vendas.router, prefix="/api/v1/vendas", tags=["Operação de Venda"])
 app.include_router(notas.router, prefix="/api/v1/notas", tags=["NFC-e"])

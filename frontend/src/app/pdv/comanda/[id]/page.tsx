@@ -32,12 +32,19 @@ export default function ComandaMobilePage() {
   const [showClienteSearch, setShowClienteSearch] = useState(false)
   const [clienteDoc, setClienteDoc] = useState('')
   const [clienteEncontrado, setClienteEncontrado] = useState<any>(null)
+  const [addingItem, setAddingItem] = useState<number | null>(null)
+  const [justAdded, setJustAdded] = useState<number | null>(null)
 
   const fetchVenda = async () => {
     try {
       const res = await axios.post(API_VENDAS, { mesa: parseInt(id as string) })
       setVenda(res.data)
-      if (res.data.cliente) setClienteEncontrado(res.data.cliente)
+      // Sincronizar o cliente encontrado com o que veio do banco
+      if (res.data.cliente) {
+        setClienteEncontrado(res.data.cliente)
+      } else {
+        setClienteEncontrado(null)
+      }
     } catch (err) { console.error(err) }
   }
 
@@ -53,14 +60,25 @@ export default function ComandaMobilePage() {
   }, [id])
 
   const handleAddItem = async (produto: any) => {
-    if (!venda?.id) return
+    if (!venda?.id || addingItem) return
+    setAddingItem(produto.id)
     try {
       const res = await axios.post(`${API_VENDAS}/${venda.id}/itens`, {
         produto_id: produto.id,
         quantidade: 1
       })
       setVenda(res.data)
-    } catch (err) { console.error(err) }
+      setJustAdded(produto.id)
+      setTimeout(() => setJustAdded(null), 1500) // Feedback visual por 1.5s
+    } catch (err) { 
+      console.error(err) 
+    } finally {
+      setAddingItem(null)
+    }
+  }
+
+  const getItemCount = (produtoId: number) => {
+    return venda?.itens?.filter((i: any) => i.produto_id === produtoId).length || 0
   }
 
   const handleRemoveItem = async (ids: number[]) => {
@@ -159,13 +177,49 @@ export default function ComandaMobilePage() {
           <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} className="fixed inset-0 z-50 bg-white dark:bg-slate-900 flex flex-col p-6">
             <div className="flex justify-between mb-6"><h2 className="text-xl font-black dark:text-white uppercase">Cardápio</h2><button onClick={() => setShowAddItems(false)} className="p-2 bg-slate-100 dark:bg-slate-800 rounded-full"><X /></button></div>
             <div className="grid grid-cols-2 gap-4 flex-1 overflow-y-auto">
-              {produtos.map(p => (
-                <button key={p.id} onClick={() => handleAddItem(p)} className="bg-white dark:bg-slate-800 p-4 rounded-3xl border border-slate-100 dark:border-slate-700 text-left active:scale-95 transition-all">
-                  <div className="h-24 bg-slate-50 dark:bg-slate-900 rounded-xl mb-2 overflow-hidden">{p.imagem_url && <img src={`http://localhost:8000${p.imagem_url}`} className="w-full h-full object-cover" />}</div>
-                  <h4 className="text-xs font-black dark:text-white truncate">{p.descricao}</h4>
-                  <p className="text-brand-600 font-black text-sm">R$ {parseFloat(p.preco_venda).toFixed(2)}</p>
-                </button>
-              ))}
+              {produtos.map(p => {
+                const count = getItemCount(p.id)
+                const isAdding = addingItem === p.id
+                const isJustAdded = justAdded === p.id
+
+                return (
+                  <button 
+                    key={p.id} 
+                    disabled={isAdding}
+                    onClick={() => handleAddItem(p)} 
+                    className={`bg-white dark:bg-slate-800 p-4 rounded-3xl border-2 text-left active:scale-95 transition-all relative overflow-hidden flex flex-col min-h-[160px] ${
+                      isJustAdded ? 'border-emerald-500 shadow-lg shadow-emerald-500/20' : 'border-slate-100 dark:border-slate-700'
+                    }`}
+                  >
+                    {count > 0 && (
+                      <div className="absolute top-2 right-2 bg-brand-600 text-white text-[10px] font-black px-2 py-0.5 rounded-full z-10 animate-in zoom-in">
+                        {count}
+                      </div>
+                    )}
+                    
+                    <div className="h-24 w-full bg-slate-50 dark:bg-slate-900 rounded-xl mb-2 overflow-hidden relative flex-shrink-0">
+                      {p.imagem_url && <img src={`http://localhost:8000${p.imagem_url}`} className="w-full h-full object-cover" alt={p.descricao} />}
+                      {isAdding && (
+                        <div className="absolute inset-0 bg-white/60 dark:bg-slate-900/60 flex items-center justify-center">
+                          <Loader2 className="w-6 h-6 animate-spin text-brand-600" />
+                        </div>
+                      )}
+                      {isJustAdded && (
+                        <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} className="absolute inset-0 bg-emerald-500/20 flex items-center justify-center">
+                          <div className="bg-emerald-500 text-white rounded-full p-1 shadow-lg">
+                            <Check className="w-6 h-6" />
+                          </div>
+                        </motion.div>
+                      )}
+                    </div>
+                    
+                    <div className="flex-1 flex flex-col justify-between">
+                      <h4 className="text-[11px] font-black dark:text-white leading-tight line-clamp-2">{p.descricao}</h4>
+                      <p className="text-brand-600 font-black text-sm mt-1">R$ {parseFloat(p.preco_venda).toFixed(2)}</p>
+                    </div>
+                  </button>
+                )
+              })}
             </div>
           </motion.div>
         )}

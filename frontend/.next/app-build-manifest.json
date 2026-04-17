@@ -1,35 +1,55 @@
 {
   "pages": {
-    "/_not-found": [
-      "static/chunks/webpack-00964e9d4a2892d7.js",
-      "static/chunks/fd9d1056-ec06e3651eb582df.js",
-      "static/chunks/69-ddcded77b618511a.js",
-      "static/chunks/main-app-3a298945660f9f25.js",
-      "static/chunks/app/_not-found-9d36fadb54502b5c.js"
+    "/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/page.js"
     ],
     "/layout": [
-      "static/chunks/webpack-00964e9d4a2892d7.js",
-      "static/chunks/fd9d1056-ec06e3651eb582df.js",
-      "static/chunks/69-ddcded77b618511a.js",
-      "static/chunks/main-app-3a298945660f9f25.js",
-      "static/css/2e68c0b25c4501bc.css",
-      "static/chunks/app/layout-dbbb02aa566ff7fd.js"
-    ],
-    "/login/page": [
-      "static/chunks/webpack-00964e9d4a2892d7.js",
-      "static/chunks/fd9d1056-ec06e3651eb582df.js",
-      "static/chunks/69-ddcded77b618511a.js",
-      "static/chunks/main-app-3a298945660f9f25.js",
-      "static/chunks/610-c2203c2f939a9ce6.js",
-      "static/chunks/app/login/page-553b1a33a936582f.js"
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/css/app/layout.css",
+      "static/chunks/app/layout.js"
     ],
     "/setup-admin/page": [
-      "static/chunks/webpack-00964e9d4a2892d7.js",
-      "static/chunks/fd9d1056-ec06e3651eb582df.js",
-      "static/chunks/69-ddcded77b618511a.js",
-      "static/chunks/main-app-3a298945660f9f25.js",
-      "static/chunks/610-c2203c2f939a9ce6.js",
-      "static/chunks/app/setup-admin/page-712e658bbfdc6217.js"
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/setup-admin/page.js"
+    ],
+    "/login/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/login/page.js"
+    ],
+    "/dashboard/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/dashboard/page.js"
+    ],
+    "/wizard-fiscal/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/wizard-fiscal/page.js"
+    ],
+    "/cardapio/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/cardapio/page.js"
+    ],
+    "/clientes/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/clientes/page.js"
+    ],
+    "/pdv/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/pdv/page.js"
+    ],
+    "/pdv/comanda/[id]/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/pdv/comanda/[id]/page.js"
     ]
   }
 }

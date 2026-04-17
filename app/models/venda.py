@@ -1,0 +1,71 @@
+from sqlalchemy import Column, Integer, String, Numeric, DateTime, ForeignKey, Enum, Index
+from sqlalchemy.orm import relationship
+from app.db.session import Base
+from datetime import datetime
+import enum
+
+class StatusVenda(str, enum.Enum):
+    ABERTA = "ABERTA"
+    AGUARDANDO_PAGAMENTO = "AGUARDANDO_PAGAMENTO"
+    PAGA = "PAGA"
+    CANCELADA = "CANCELADA"
+
+class FormaPagamento(str, enum.Enum):
+    PIX = "PIX"
+    DINHEIRO = "DINHEIRO"
+    CARTAO_CREDITO = "CARTAO_CREDITO"
+    CARTAO_DEBITO = "CARTAO_DEBITO"
+
+class Venda(Base):
+    """
+    Cabeçalho da venda (Comanda/Mesa).
+    Controla o estado da mesa e o total acumulado.
+    """
+    __tablename__ = "vendas"
+
+    id = Column(Integer, primary_key=True, index=True)
+    mesa = Column(Integer, nullable=False) # Número da mesa/comanda
+    status = Column(Enum(StatusVenda), default=StatusVenda.ABERTA)
+    total = Column(Numeric(10, 2), default=0.00)
+    data_abertura = Column(DateTime, default=datetime.utcnow)
+    data_fechamento = Column(DateTime, nullable=True)
+    forma_pagamento = Column(Enum(FormaPagamento), nullable=True)
+    
+    # Payload PIX gerado para esta venda específica
+    pix_payload = Column(String(512), nullable=True)
+    pix_expiracao = Column(DateTime, nullable=True)
+
+    # Relacionamentos
+    cliente_id = Column(Integer, ForeignKey("clientes.id"), nullable=True)
+    cliente = relationship("app.models.cliente.Cliente", back_populates="vendas")
+    
+    itens = relationship("VendaItem", back_populates="venda", cascade="all, delete-orphan")
+
+    # ÍNDICE DE UNICIDADE PARCIAL: Só permite uma mesa ativa (ABERTA ou AGUARDANDO_PAGAMENTO) por vez.
+    # Se status for PAGA ou CANCELADA, a mesa pode ser aberta novamente.
+    __table_args__ = (
+        Index(
+            "idx_venda_ativa_mesa",
+            "mesa",
+            unique=True,
+            postgresql_where=(status.in_([StatusVenda.ABERTA, StatusVenda.AGUARDANDO_PAGAMENTO]))
+        ),
+    )
+
+class VendaItem(Base):
+    """
+    Itens vinculados a uma venda.
+    Copia o preço do produto no momento da venda para histórico.
+    """
+    __tablename__ = "venda_itens"
+
+    id = Column(Integer, primary_key=True, index=True)
+    venda_id = Column(Integer, ForeignKey("vendas.id"), nullable=False)
+    produto_id = Column(Integer, ForeignKey("produtos.id"), nullable=False)
+    quantidade = Column(Integer, default=1)
+    preco_unitario = Column(Numeric(10, 2), nullable=False)
+    subtotal = Column(Numeric(10, 2), nullable=False)
+
+    # Relacionamentos
+    venda = relationship("Venda", back_populates="itens")
+    produto = relationship("app.models.produto.Produto", lazy="joined")

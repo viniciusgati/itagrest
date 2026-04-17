@@ -1,5 +1,8 @@
 {
-  "/_not-found": "app/_not-found.js",
-  "/login/page": "app/login/page.js",
-  "/setup-admin/page": "app/setup-admin/page.js"
+  "/dashboard/page": "app/dashboard/page.js",
+  "/wizard-fiscal/page": "app/wizard-fiscal/page.js",
+  "/cardapio/page": "app/cardapio/page.js",
+  "/clientes/page": "app/clientes/page.js",
+  "/pdv/comanda/[id]/page": "app/pdv/comanda/[id]/page.js",
+  "/pdv/page": "app/pdv/page.js"
 }

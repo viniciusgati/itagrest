@@ -1,18 +1,19 @@
 status:
   branch: main
   modifiedFiles:
-    - README.md
-    - .aiox-core/
-    - .antigravity/
-    - .claude/
-    - .codex/
-  modifiedFilesTotalCount: 14
+    - .aiox/project-status.yaml
+    - .aiox/sessions/recent.json
+    - .aiox/sessions/unknown.json
+    - app/__pycache__/main.cpython-314.pyc
+    - app/api/v1/endpoints/vendas.py
+  modifiedFilesTotalCount: 199
   recentCommits:
-    - first commit
+    - 'feat: release v1.1.0 - Customer Management, Printing (58mm) and Stability'
+    - 'feat: multi-environment support & mobile comanda refactor'
   currentEpic: null
   currentStory: null
-  lastUpdate: '2026-04-14T23:45:21.230Z'
+  lastUpdate: '2026-04-17T01:01:51.898Z'
   isGitRepo: true
-timestamp: 1776210321232
+timestamp: 1776387711899
 ttl: 60
-gitFingerprint: 1776209425743.9175:1776209421108.1414
+gitFingerprint: 1776209425743.9175:1776384981674.2402

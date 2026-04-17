@@ -9,6 +9,14 @@ from sqlalchemy.orm import sessionmaker
 from app.main import app
 from app.db.session import Base, get_db
 
+# Importar todos os modelos para o SQLAlchemy reconhecê-los
+from app.models.usuario import Usuario
+from app.models.empresa import Empresa
+from app.models.produto import Produto
+from app.models.venda import Venda, VendaItem
+from app.models.cliente import Cliente
+from app.models.nota_fiscal import NotaFiscal
+
 # Banco de dados de teste (SQLite em memória)
 SQLALCHEMY_DATABASE_URL = "sqlite:///./test.db"
 

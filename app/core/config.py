@@ -5,14 +5,34 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class Settings:
-    """Configurações manuais para evitar problemas de validação do Pydantic no ambiente OS."""
-    APP_NAME: str = os.getenv("APP_NAME", "iTagRest")
-    DEBUG: bool = os.getenv("DEBUG", "True").lower() == "true"
-    VERSION: str = os.getenv("VERSION", "0.1.0")
+    APP_NAME: str = "iTagREST"
+    VERSION: str = "1.0.0"
     
-    # Database
-    DATABASE_URL: str = os.getenv("DATABASE_URL", "postgresql://root:root@localhost:5432/itagrest_db")
+    # AMBIENTE: test, homolog, production (Default: homolog para sua máquina)
+    ENV: str = os.getenv("APP_ENV", "homolog").lower()
     
+    # LÓGICA DE BANCO DE DADOS (Regra de Ouro)
+    @property
+    def DATABASE_URL(self) -> str:
+        # 1. Se for ambiente de TEST, forçar SQLite
+        if self.ENV == "test":
+            return "sqlite:///./test.db"
+        
+        # 2. Para Homolog ou Produção, DEVE ser Postgres
+        db_url = os.getenv("DATABASE_URL")
+        
+        # Se houver uma URL no .env e for Postgres, usamos ela
+        if db_url and db_url.startswith("postgresql"):
+            return db_url
+            
+        # 3. Fallback: Montar nome baseado no ambiente (itagrest_homolog ou itagrest_production)
+        db_user = os.getenv("DB_USER", "root")
+        db_pass = os.getenv("DB_PASS", "root")
+        db_host = os.getenv("DB_HOST", "localhost")
+        db_name = f"itagrest_{self.ENV}"
+        
+        return f"postgresql://{db_user}:{db_pass}@{db_host}:5432/{db_name}"
+
     # Fiscal
     CERT_DIR: str = os.getenv("CERT_DIR", "storage/certs")
     
