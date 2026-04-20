@@ -1,0 +1,70 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: itagrest_db
+    restart: always
+    environment:
+      - POSTGRES_USER=root
+      - POSTGRES_PASSWORD=root
+      - POSTGRES_DB=itagrest_homolog
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U root -d itagrest_homolog"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - itagrest_network
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: itagrest_backend
+    ports:
+      - "8000:8000"
+    environment:
+      - APP_ENV=homolog
+      - DATABASE_URL=postgresql://root:root@db:5432/itagrest_homolog
+      - DB_USER=root
+      - DB_PASS=root
+      - DB_HOST=db
+    volumes:
+      - ./app:/app/app
+      - ./storage:/app/storage
+      - ./alembic:/app/alembic
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - itagrest_network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_API_URL=http://localhost:8000
+    container_name: itagrest_frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - itagrest_network
+
+networks:
+  itagrest_network:
+    driver: bridge
+
+volumes:
+  postgres_data:
