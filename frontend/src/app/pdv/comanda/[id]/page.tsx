@@ -7,14 +7,9 @@ import {
   CreditCard, X, Check, Loader2, DollarSign, 
   QrCode, Utensils, ShoppingBag, User, UserPlus, Printer
 } from 'lucide-react'
-import axios from 'axios'
+import api, { getImageUrl } from '@/lib/api'
 import { motion, AnimatePresence } from 'framer-motion'
 import { QRCodeSVG } from 'qrcode.react'
-
-const API_VENDAS = 'http://localhost:8000/api/v1/vendas'
-const API_PRODUTOS = 'http://localhost:8000/api/v1/produtos'
-const API_NOTAS = 'http://localhost:8000/api/v1/notas'
-const API_CLIENTES = 'http://localhost:8000/api/v1/clientes'
 
 export default function ComandaMobilePage() {
   const { id } = useParams()
@@ -37,7 +32,7 @@ export default function ComandaMobilePage() {
 
   const fetchVenda = async () => {
     try {
-      const res = await axios.post(API_VENDAS, { mesa: parseInt(id as string) })
+      const res = await api.post('/vendas', { mesa: parseInt(id as string) })
       setVenda(res.data)
       // Sincronizar o cliente encontrado com o que veio do banco
       if (res.data.cliente) {
@@ -50,7 +45,7 @@ export default function ComandaMobilePage() {
 
   const fetchProdutos = async () => {
     try {
-      const res = await axios.get(API_PRODUTOS)
+      const res = await api.get('/produtos')
       setProdutos(res.data)
     } catch (err) { console.error(err) }
   }
@@ -63,7 +58,7 @@ export default function ComandaMobilePage() {
     if (!venda?.id || addingItem) return
     setAddingItem(produto.id)
     try {
-      const res = await axios.post(`${API_VENDAS}/${venda.id}/itens`, {
+      const res = await api.post(`/vendas/${venda.id}/itens`, {
         produto_id: produto.id,
         quantidade: 1
       })
@@ -84,15 +79,15 @@ export default function ComandaMobilePage() {
   const handleRemoveItem = async (ids: number[]) => {
     const lastId = ids[ids.length - 1]
     try {
-      const res = await axios.delete(`${API_VENDAS}/${venda.id}/itens/${lastId}`)
+      const res = await api.delete(`/vendas/${venda.id}/itens/${lastId}`)
       setVenda(res.data)
     } catch (err) { console.error(err) }
   }
 
   const handleVincularCliente = async () => {
     try {
-      const res = await axios.get(`${API_CLIENTES}/buscar-doc/${clienteDoc}`)
-      await axios.put(`${API_VENDAS}/${venda.id}/fechar`, { cliente_id: res.data.id })
+      const res = await api.get(`/clientes/buscar-doc/${clienteDoc}`)
+      await api.put(`/vendas/${venda.id}/fechar`, { cliente_id: res.data.id })
       setClienteEncontrado(res.data)
       setShowClienteSearch(false)
       fetchVenda()
@@ -104,13 +99,13 @@ export default function ComandaMobilePage() {
   const handleFecharMesa = async (forma: string) => {
     setIsEmitting(forma === 'DINHEIRO')
     try {
-      const res = await axios.put(`${API_VENDAS}/${venda.id}/fechar`, {
+      const res = await api.put(`/vendas/${venda.id}/fechar`, {
         forma_pagamento: forma,
         status: forma === 'PIX' ? 'AGUARDANDO_PAGAMENTO' : 'PAGA'
       })
       setVenda(res.data)
       if (forma === 'DINHEIRO') {
-        const resNota = await axios.post(`${API_NOTAS}/emitir/${venda.id}`)
+        const resNota = await api.post(`/notas/emitir/${venda.id}`)
         setFiscalStatus(resNota.data)
       }
     } catch (err: any) {
@@ -198,7 +193,7 @@ export default function ComandaMobilePage() {
                     )}
                     
                     <div className="h-24 w-full bg-slate-50 dark:bg-slate-900 rounded-xl mb-2 overflow-hidden relative flex-shrink-0">
-                      {p.imagem_url && <img src={`http://localhost:8000${p.imagem_url}`} className="w-full h-full object-cover" alt={p.descricao} />}
+                      {p.imagem_url && <img src={getImageUrl(p.imagem_url)} className="w-full h-full object-cover" alt={p.descricao} />}
                       {isAdding && (
                         <div className="absolute inset-0 bg-white/60 dark:bg-slate-900/60 flex items-center justify-center">
                           <Loader2 className="w-6 h-6 animate-spin text-brand-600" />
@@ -241,7 +236,7 @@ export default function ComandaMobilePage() {
                   <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-600 mx-auto"><Check className="w-10 h-10" /></div>
                   <p className="text-xl font-black text-emerald-600 uppercase">Autorizada!</p>
                   <button 
-                    onClick={() => window.open(`http://localhost:8000/api/v1/notas/${venda.id}/imprimir`, '_blank')}
+                    onClick={() => window.open(getImageUrl(`/api/v1/notas/${venda.id}/imprimir`), '_blank')}
                     className="w-full mt-4 bg-slate-900 dark:bg-brand-600 text-white py-4 rounded-2xl font-black uppercase tracking-widest text-xs flex items-center justify-center gap-3"
                   >
                     <Printer className="w-5 h-5" /> Imprimir Cupom

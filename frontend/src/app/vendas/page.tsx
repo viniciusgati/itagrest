@@ -2,11 +2,11 @@
 
 import { useState, useEffect } from 'react'
 import { ArrowLeft, Search, FileText, Code, CheckCircle2, XCircle, Clock, ExternalLink, Loader2, Printer } from 'lucide-react'
-import axios from 'axios'
+import api, { getImageUrl } from '@/lib/api'
 import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
 
-const API_VENDAS = 'http://localhost:8000/api/v1/vendas'
+
 
 export default function VendasMonitorPage() {
   const [vendas, setVendas] = useState<any[]>([])
@@ -17,7 +17,7 @@ export default function VendasMonitorPage() {
   const fetchVendas = async () => {
     setLoading(true)
     try {
-      const res = await axios.get(`${API_VENDAS}/lista`)
+      const res = await api.get('/vendas/lista')
       setVendas(res.data)
     } catch (err) { console.error(err) }
     finally { setLoading(false) }
@@ -28,16 +28,16 @@ export default function VendasMonitorPage() {
   }, [])
 
   const handleViewXml = (vendaId: number) => {
-    window.open(`${API_VENDAS}/${vendaId}/log-xml`, '_blank')
+    window.open(getImageUrl(`/api/v1/vendas/${vendaId}/log-xml`), '_blank')
   }
 
   const handlePrint = (vendaId: number) => {
-    window.open(`http://localhost:8000/api/v1/notas/${vendaId}/imprimir`, '_blank')
+    window.open(getImageUrl(`/api/v1/notas/${vendaId}/imprimir`), '_blank')
   }
 
   const handleViewLog = async (vendaId: number) => {
     try {
-      const res = await axios.get(`${API_VENDAS}/${vendaId}/log-texto`)
+      const res = await api.get(`/vendas/${vendaId}/log-texto`)
       setLogView(res.data.log)
     } catch (err) { alert("Log não disponível.") }
   }

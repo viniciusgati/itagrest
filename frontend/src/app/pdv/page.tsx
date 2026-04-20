@@ -2,15 +2,11 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { UtensilsCrossed, Search, ShoppingCart, X, ChevronRight, CreditCard, QrCode, DollarSign, Check, Loader2, ArrowLeft, Trash2, RotateCcw, FileText } from 'lucide-react'
-import axios from 'axios'
+import api, { getImageUrl } from '@/lib/api'
 import { motion, AnimatePresence } from 'framer-motion'
 import { QRCodeSVG } from 'qrcode.react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-
-const API_VENDAS = 'http://localhost:8000/api/v1/vendas'
-const API_PRODUTOS = 'http://localhost:8000/api/v1/produtos'
-const API_NOTAS = 'http://localhost:8000/api/v1/notas'
 
 export default function PDVPage() {
   const router = useRouter()
@@ -21,14 +17,14 @@ export default function PDVPage() {
 
   const fetchMesas = async () => {
     try {
-      const res = await axios.get(`${API_VENDAS}/mesas`)
+      const res = await api.get('/vendas/mesas')
       setMesas(res.data)
     } catch (err) { console.error(err) }
   }
 
   const fetchProdutos = async () => {
     try {
-      const res = await axios.get(API_PRODUTOS)
+      const res = await api.get('/produtos')
       setProdutos(res.data)
     } catch (err) { console.error(err) }
   }

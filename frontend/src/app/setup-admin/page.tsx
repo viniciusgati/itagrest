@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { User, Mail, Lock, CheckCircle2, Loader2, AlertCircle } from 'lucide-react'
-import axios from 'axios'
+import api from '@/lib/api'
 
 export default function SetupAdmin() {
   const [formData, setFormData] = useState({
@@ -46,7 +46,7 @@ export default function SetupAdmin() {
     setError('')
 
     try {
-      await axios.post('http://localhost:8000/api/v1/setup/setup-admin', {
+      await api.post('/setup/setup-admin', {
         full_name: formData.full_name,
         username: formData.username,
         email: formData.email,
