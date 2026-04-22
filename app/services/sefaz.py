@@ -7,15 +7,22 @@ from sqlalchemy.orm import Session
 from datetime import datetime
 from decimal import Decimal
 import io
+import binascii
 
-# Módulos de Impressão (ReportLab)
+# Módulos de Impressão (ERPBrasil PDF)
 try:
-    from reportlab.pdfgen import canvas
-    from reportlab.graphics.barcode import qr
-    HAS_REPORTLAB = True
+    from erpbrasil.edoc.pdf import danfe
+    HAS_DANFE_LIB = True
 except ImportError:
-    HAS_REPORTLAB = False
-    print("AVISO: ReportLab não encontrada. Impressão de DANFE desativada.")
+    HAS_DANFE_LIB = False
+    print("AVISO: erpbrasil.edoc.pdf não encontrada. Usando fallback ReportLab.")
+    try:
+        from reportlab.pdfgen import canvas
+        from reportlab.graphics.barcode import qr
+        HAS_REPORTLAB = True
+    except ImportError:
+        HAS_REPORTLAB = False
+        print("AVISO: ReportLab não encontrada. Impressão de DANFE desativada.")
 
 # Variável global para capturar erro de importação
 ERP_IMPORT_ERROR = ""
@@ -51,14 +58,14 @@ try:
 except ImportError as e:
     HAS_ERPBRASIL = False
     ERP_IMPORT_ERROR = str(e)
-except Exception as e:
-    HAS_ERPBRASIL = False
-    ERP_IMPORT_ERROR = str(e)
+    print(f"ERRO CRÍTICO: Bibliotecas ERPBrasil não carregadas: {e}")
 
-from app.models.empresa import Empresa
 from app.models.venda import Venda
 from app.models.nota_fiscal import NotaFiscal as NotaFiscalModel
-from app.core.logging import log_sefaz_evento, log_xml_auditoria
+from app.models.empresa import Empresa
+
+def log_sefaz_evento(venda_id: int, tipo: str, mensagem: str):
+    print(f"[{datetime.now().isoformat()}] [VENDA:{venda_id}] [{tipo}] {mensagem}")
 
 class SefazService:
     @staticmethod
@@ -188,26 +195,59 @@ class SefazService:
             pag=pag
         )
         
-        return nfe.TNFe(infNFe=inf_nfe_data)
+        nota_obj = nfe.TNFe(infNFe=inf_nfe_data)
+        
+        # 7. QR Code (NFC-e exige infNFeSupl)
+        if empresa.csc_token and empresa.csc_id:
+             # Colocamos o placeholder necessário. A lib de transmissão cuidará de preencher a URL real.
+            nota_obj.infNFeSupl = nfe.infNFeSuplType(
+                qrCode="", 
+                urlChave="" 
+            )
+            
+        return nota_obj
 
     @staticmethod
     def gerar_danfe_pdf(db: Session, venda_id: int) -> io.BytesIO:
+        """Gera o PDF da DANFE usando erpbrasil.edoc.pdf para suporte real a QR Code."""
         venda = db.query(Venda).filter(Venda.id == venda_id).first()
-        empresa = db.query(Empresa).first()
         nota = db.query(NotaFiscalModel).filter(NotaFiscalModel.venda_id == venda_id).first()
-        if not nota: raise Exception("Nota fiscal não autorizada.")
+        
+        if not nota or not nota.xml_autorizado:
+            raise Exception("Nota fiscal não autorizada ou XML não encontrado.")
+
+        if HAS_DANFE_LIB:
+            try:
+                # O XML autorizado salvo no banco deve ser um nfeProc completo
+                xml_content = nota.xml_autorizado.encode('utf-8')
+                o_danfe = danfe.Danfe(
+                    xml=xml_content,
+                    logo='' 
+                )
+                return io.BytesIO(o_danfe.output())
+            except Exception as e:
+                print(f"Erro ao usar erpbrasil.edoc.pdf: {e}. Usando fallback ReportLab.")
+
+        # FALLBACK: Layout simplificado via ReportLab
+        if not HAS_REPORTLAB:
+            raise Exception("Nenhuma biblioteca de impressão (ERPBrasil PDF ou ReportLab) disponível.")
+            
         largura, altura = 145, (250 + (len(venda.itens) * 25)) 
         buffer = io.BytesIO()
         c = canvas.Canvas(buffer, pagesize=(largura, altura))
         y = altura - 15
+        empresa = db.query(Empresa).first()
+        
         c.setFont("Helvetica-Bold", 8); c.drawCentredString(largura/2, y, empresa.razao_social.upper()[:25]); y -= 10
         c.setFont("Helvetica", 6); c.drawCentredString(largura/2, y, f"CNPJ: {empresa.cnpj}"); y -= 15
-        c.setFont("Helvetica-Bold", 8); c.drawCentredString(largura/2, y, "DANFE NFC-e"); y -= 12
-        c.setFont("Helvetica", 6)
+        c.setFont("Helvetica-Bold", 8); c.drawCentredString(largura/2, y, "DANFE NFC-e (Fallback)"); y -= 12
+        
         for item in venda.itens:
+            c.setFont("Helvetica", 6)
             c.drawString(5, y, item.produto.descricao[:22])
             c.drawRightString(largura - 5, y, f"{item.subtotal:.2f}")
             y -= 10
+            
         y -= 5; c.line(5, y, largura - 5, y); y -= 12
         c.setFont("Helvetica-Bold", 9); c.drawString(5, y, "TOTAL"); c.drawRightString(largura - 5, y, f"R$ {venda.total:.2f}"); y -= 15
         c.setFont("Helvetica", 5); c.drawCentredString(largura/2, y, f"Nota: {nota.numero_nota} Série: {nota.serie_nota}"); y -= 8
@@ -234,6 +274,8 @@ class SefazService:
         nfe_obj.export(output, 0, name_='TNFe', namespacedef_='xmlns="http://www.portalfiscal.inf.br/nfe"')
         xml_string = output.getvalue()
 
+        nota.xml_enviado = xml_string
+        nota.xml_recebido = f"<mock_sefaz_response><status>100</status><protocolo>{protocolo}</protocolo></mock_sefaz_response>"
         nota.xml_autorizado = xml_string
         nota.logs_transmissao = f"[{datetime.now().isoformat()}] MOCK_MODE: Emissão simulada com sucesso.\n"
         
@@ -242,7 +284,7 @@ class SefazService:
 
     @staticmethod
     def emitir_nfce(db: Session, venda: Venda):
-        """Fluxo real de Emissão SEFAZ com Trava de Segurança."""
+        """Fluxo real de Emissão SEFAZ."""
         from app.core.config import settings
         
         nota = db.query(NotaFiscalModel).filter(NotaFiscalModel.venda_id == venda.id).first()
@@ -252,7 +294,7 @@ class SefazService:
             db.commit()
             db.refresh(nota)
             
-        logs = f"[{datetime.now().isoformat()}] INICIO: Processando emissão da Venda {venda.id} (v_fix_brutal_patch_013)\n"
+        logs = f"[{datetime.now().isoformat()}] INICIO: Processando emissão da Venda {venda.id}\n"
         
         if settings.ENV == "test":
             log_sefaz_evento(venda.id, "TEST_MODE", "Transmissão bloqueada por ambiente de teste.")
@@ -274,22 +316,32 @@ class SefazService:
                 cert_path = os.path.join("storage/certs", os.path.basename(empresa.certificado_path))
             
             if not os.path.exists(cert_path):
-                 raise Exception(f"Certificado não encontrado.")
+                 raise Exception(f"Certificado não encontrado em {cert_path}")
                  
             with open(cert_path, "rb") as f: pfx_data = f.read()
             
-            import binascii
             file_head = binascii.hexlify(pfx_data[:4]).decode()
             logs += f"[{datetime.now().isoformat()}] PFX_INFO: Size={len(pfx_data)} | Head={file_head} | PassLen={len(empresa.certificado_senha or '')}\n"
             
-            status_sefaz, motivo_sefaz, protocolo = "100", "Autorizado (Offline/Fallback)", "135230000000001"
+            # Inicializamos variáveis para evitar fallbacks
+            status_sefaz, motivo_sefaz, protocolo = None, None, None
             cnpj_14 = empresa.cnpj.zfill(14)
             data_aa_mm = datetime.now().strftime('%y%m')
+            
+            # Chave Provisória (Será refinada pela nfelib se possível)
             chave = f"35{data_aa_mm}{cnpj_14}65001{venda.id:09}1{venda.id:08}0"[:44]
             
             # MONTAGEM DO OBJETO DA NOTA
             nfe_obj = SefazService._montar_xml_nfce(empresa, venda, chave)
-            logs += f"[{datetime.now().isoformat()}] OBJETO_GERADO: Chave {chave}\n"
+            logs += f"[{datetime.now().isoformat()}] OBJETO_GERADO: Chave Provisória {chave}\n"
+
+            # Captura o XML que será enviado
+            try:
+                out_envio = io.StringIO()
+                nfe_obj.export(out_envio, 0, name_='TNFe', namespacedef_='xmlns="http://www.portalfiscal.inf.br/nfe"')
+                nota.xml_enviado = out_envio.getvalue()
+            except Exception as e:
+                logs += f"[{datetime.now().isoformat()}] ERRO_EXTRACAO_ENVIO: {str(e)}\n"
 
             if HAS_ERPBRASIL:
                 try:
@@ -335,12 +387,19 @@ class SefazService:
                         transmissao=transmissao,
                         uf=uf_ibge,
                         ambiente=str(empresa.ambiente), 
-                        mod='65'
+                        mod='65',
+                        csc=empresa.csc_token,
+                        cidtoken=empresa.csc_id
                     )
                     
                     # TRANSMISSÃO REAL ATIVADA
+                    # A lib cuidará de gerar o QR Code se o CSC estiver presente
                     processo = edoc.processar_documento(nfe_obj, envio_sincrono=True)
                     envio = next(processo)
+                    
+                    # Salva a resposta bruta se houver objeto de retorno da requisição
+                    if hasattr(envio, 'retorno') and hasattr(envio.retorno, 'text'):
+                        nota.xml_recebido = envio.retorno.text
                     
                     if envio.resposta:
                         resp = envio.resposta
@@ -348,34 +407,42 @@ class SefazService:
                             status_sefaz = str(resp.protNFe.infProt.cStat)
                             motivo_sefaz = str(resp.protNFe.infProt.xMotivo)
                             protocolo = str(resp.protNFe.infProt.nProt)
+                            # Pega a chave real que a lib gerou/assinou
+                            if hasattr(resp.protNFe.infProt, 'chNFe'):
+                                chave = str(resp.protNFe.infProt.chNFe)
                         elif hasattr(resp, 'cStat'):
                             status_sefaz = str(resp.cStat)
                             motivo_sefaz = str(resp.xMotivo)
                         
                         try:
                             output = io.StringIO()
+                            # Se autorizado, salva o nfeProc (Nota + Protocolo)
                             if hasattr(envio, 'xml_autorizado') and envio.xml_autorizado:
-                                envio.xml_autorizado.export(output, 0, name_='nfeProc', namespacedef_='xmlns="http://www.portalfiscal.inf.br/nfe"')
+                                xml_string = etree.tostring(envio.xml_autorizado, encoding='unicode')
                             else:
                                 resp.export(output, 0, namespacedef_='xmlns="http://www.portalfiscal.inf.br/nfe"')
-                            xml_string = output.getvalue()
+                                xml_string = output.getvalue()
                         except:
-                            xml_string = envio.retorno.text if hasattr(envio, 'retorno') else "Falha ao exportar XML de resposta"
+                            xml_string = envio.retorno.text if hasattr(envio, 'retorno') else "Falha ao exportar XML"
                         
                         logs += f"[{datetime.now().isoformat()}] SEFAZ_RESPOSTA: Status {status_sefaz} - {motivo_sefaz}\n"
                         logs += f"[{datetime.now().isoformat()}] SEFAZ_PROTOCOLO: {protocolo}\n"
                         nota.xml_autorizado = xml_string
                     else:
                         logs += f"[{datetime.now().isoformat()}] SEFAZ_ERRO: Sem resposta síncrona.\n"
+                        status_sefaz = "ERRO"
+                        motivo_sefaz = "Sem resposta da SEFAZ"
                         
                 except Exception as e:
                     logs += f"[{datetime.now().isoformat()}] ENGINE_ERRO: {str(e)}\n"
+                    nota.status_sefaz = "ERRO"
+                    nota.motivo_sefaz = str(e)
+                    nota.logs_transmissao = logs
+                    db.commit()
                     raise Exception(f"Falha na transmissão SEFAZ: {str(e)}")
             else:
-                logs += f"[{datetime.now().isoformat()}] AVISO: ERPBrasil não carregado. Motivo: {ERP_IMPORT_ERROR}\n"
-                output = io.StringIO()
-                nfe_obj.export(output, 0, name_='TNFe', namespacedef_='xmlns="http://www.portalfiscal.inf.br/nfe"')
-                xml_string = output.getvalue()
+                logs += f"[{datetime.now().isoformat()}] ERRO: ERPBrasil não carregado.\n"
+                raise Exception("Ambiente não possui ERPBrasil instalado.")
 
             nota.chave_acesso = chave
             nota.numero_nota = venda.id
@@ -383,7 +450,6 @@ class SefazService:
             nota.protocolo = protocolo
             nota.status_sefaz = status_sefaz
             nota.motivo_sefaz = motivo_sefaz
-            nota.xml_autorizado = xml_string
             nota.logs_transmissao = logs
             
             db.commit()
@@ -399,7 +465,7 @@ class SefazService:
                 if nota_update:
                     nota_update.logs_transmissao = (nota_update.logs_transmissao or logs) + f"[{datetime.now().isoformat()}] ERRO_FATAL: {str(e)}\n{error_details}\n"
                     nota_update.status_sefaz = "ERRO"
-                    nota_update.motivo_sefaz = str(e)[:250]
+                    nota_update.motivo_sefaz = str(e)
                     db.commit()
             except: pass
-            raise Exception(f"Erro na emissão: {str(e)}")
+            raise e

@@ -16,3 +16,4 @@ nfelib<1.0.0
 python-barcode
 reportlab
 lxml
+erpbrasil.edoc.pdf
