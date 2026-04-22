@@ -1,13 +1,11 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { TrendingUp, Users, DollarSign, Package, ArrowUpRight, ArrowDownRight, ShieldCheck, UtensilsCrossed, RotateCcw, Sun, Moon } from 'lucide-react'
-import axios from 'axios'
+import { TrendingUp, Users, DollarSign, Package, ArrowUpRight, ArrowDownRight, ShieldCheck, UtensilsCrossed, RotateCcw, Sun, Moon, Loader2 } from 'lucide-react'
+import api from '@/lib/api'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell } from 'recharts'
 import Link from 'next/link'
 import { useTheme } from '../theme-provider'
-
-const API_STATS = 'http://localhost:8000/api/v1/vendas/stats'
 
 export default function DashboardPage() {
   const { isDark, toggleTheme } = useTheme()
@@ -15,28 +13,45 @@ export default function DashboardPage() {
   const [faturamento, setFaturamento] = useState<any[]>([])
   const [topProdutos, setTopProdutos] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [isRefreshing, setIsRefreshing] = useState(false)
   const [empresaConfigurada, setEmpresaConfigurada] = useState(true)
+  const [dias, setDias] = useState(7)
 
-  const fetchData = async () => {
+  const fetchData = async (periodo: number) => {
+    setIsRefreshing(true)
     try {
-      const resStatus = await axios.get('http://localhost:8000/api/v1/empresa/status')
+      const resStatus = await api.get('/empresa/status')
       setEmpresaConfigurada(resStatus.data.configurado)
 
       const [resResumo, resFat, resTop] = await Promise.all([
-        axios.get(`${API_STATS}/resumo`),
-        axios.get(`${API_STATS}/faturamento-diario`),
-        axios.get(`${API_STATS}/top-produtos`)
+        api.get(`/vendas/stats/resumo?dias=${periodo}`),
+        api.get(`/vendas/stats/faturamento-periodo?dias=${periodo}`),
+        api.get(`/vendas/stats/top-produtos?dias=${periodo}`)
       ])
       setResumo(resResumo.data)
       setFaturamento(resFat.data)
       setTopProdutos(resTop.data)
     } catch (err) { console.error(err) }
-    finally { setLoading(false) }
+    finally { 
+      setLoading(false) 
+      setIsRefreshing(false)
+    }
   }
 
   useEffect(() => {
-    fetchData()
-  }, [])
+    fetchData(dias)
+  }, [dias])
+
+  const formatPeriodo = (val: string) => {
+    if (dias > 30) {
+      // YYYY-MM -> MM/YY
+      const [year, month] = val.split('-')
+      return `${month}/${year.slice(2)}`
+    }
+    // YYYY-MM-DD -> DD/MM
+    const parts = val.split('-')
+    return `${parts[2]}/${parts[1]}`
+  }
 
   if (loading) return (
     <div className="min-h-screen bg-slate-100 dark:bg-slate-900 p-10 flex items-center justify-center transition-colors">
@@ -90,6 +105,8 @@ export default function DashboardPage() {
           </div>
           
           <div className="flex items-center gap-4">
+            {isRefreshing && <Loader2 className="w-5 h-5 text-brand-500 animate-spin" />}
+            
             <button 
               onClick={toggleTheme}
               className="w-12 h-12 bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-50 transition-all active:scale-95"
@@ -97,8 +114,20 @@ export default function DashboardPage() {
               {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
             </button>
 
-            <div className="bg-white dark:bg-slate-800 p-2 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 flex items-center gap-2 text-slate-900 dark:text-white">
-              <span className="text-xs font-black text-slate-400 uppercase tracking-widest px-4">Período: 7 dias</span>
+            <div className="bg-white dark:bg-slate-800 p-1.5 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 flex items-center gap-1">
+              {[7, 15, 30, 365].map((d) => (
+                <button
+                  key={d}
+                  onClick={() => setDias(d)}
+                  className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                    dias === d 
+                      ? 'bg-slate-900 dark:bg-brand-600 text-white shadow-lg' 
+                      : 'text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'
+                  }`}
+                >
+                  {d === 365 ? '1 Ano' : `${d}D`}
+                </button>
+              ))}
             </div>
           </div>
         </div>
@@ -145,7 +174,7 @@ export default function DashboardPage() {
         {/* Widgets de Resumo */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           <StatCard 
-            title="Faturamento Hoje" 
+            title={`Faturamento (${dias > 30 ? '1 Ano' : `${dias}D`})`} 
             value={`R$ ${resumo?.total_faturado?.toFixed(2) || '0,00'}`} 
             trend="+12.5%"
             icon={<DollarSign className="w-6 h-6" />}
@@ -171,7 +200,7 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2 bg-white dark:bg-slate-800 p-10 rounded-[3rem] shadow-xl shadow-slate-200/40 dark:shadow-none border border-slate-100 dark:border-slate-700 flex flex-col gap-6">
             <div className="flex items-center justify-between">
-              <h3 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Faturamento Diário</h3>
+              <h3 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Faturamento por {dias > 30 ? 'Mês' : 'Dia'}</h3>
               <div className="flex items-center gap-2 text-xs font-bold text-slate-400">
                 <span className="w-3 h-3 rounded-full bg-brand-500"></span> Total Processado
               </div>
@@ -186,11 +215,19 @@ export default function DashboardPage() {
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={isDark ? "#334155" : "#f1f5f9"} />
-                  <XAxis dataKey="dia" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 10, fontWeight: 700}} dy={10} />
+                  <XAxis 
+                    dataKey="periodo" 
+                    axisLine={false} 
+                    tickLine={false} 
+                    tick={{fill: '#94a3b8', fontSize: 10, fontWeight: 700}} 
+                    dy={10} 
+                    tickFormatter={formatPeriodo}
+                  />
                   <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 10, fontWeight: 700}} />
                   <Tooltip 
                     contentStyle={{ borderRadius: '20px', border: 'none', boxShadow: '0 20px 50px rgba(0,0,0,0.1)', padding: '15px' }}
                     itemStyle={{ fontWeight: 800, color: '#1e293b' }}
+                    labelFormatter={formatPeriodo}
                   />
                   <Area type="monotone" dataKey="total" stroke="#6b8ef9" strokeWidth={4} fillOpacity={1} fill="url(#colorTotal)" />
                 </AreaChart>

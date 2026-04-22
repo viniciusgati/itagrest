@@ -9,21 +9,25 @@ Sistema moderno de gestão para restaurantes (bebidas e refeições) com foco em
 - **ORM:** SQLAlchemy / Alembic
 - **Lib Fiscal:** `erpbrasil.nfe` (Padrão Odoo Brasil)
 
-## 🛠 Configuração de Desenvolvimento
-1. **Banco de Dados (Postgres):**
-   - Host: `localhost`
-   - Porta: `5432`
-   - Usuário/Senha: `root` / `root`
-   - Database: `itagrest_db`
+## 🚀 Como Rodar o Sistema (com Docker)
 
-2. **Variáveis de Ambiente:**
-   Copie o arquivo `.env.example` para `.env` e ajuste as credenciais.
+Com o Docker e o Docker Compose instalados, basta um único comando para subir todo o ambiente (Frontend e Backend):
 
-3. **Instalação:**
-   ```bash
-   pip install -r requirements.txt
-   uvicorn app.main:app --reload
-   ```
+```bash
+# Sobe todos os serviços em background e faz o build se necessário
+docker-compose up --build -d
+```
+
+**URLs de Acesso:**
+- **Frontend:** [http://localhost:3000](http://localhost:3000)
+- **Backend (API Docs):** [http://localhost:8000/docs](http://localhost:8000/docs)
+
+**Banco de Dados:** O sistema irá se conectar ao PostgreSQL rodando no seu computador (`host.docker.internal`). Certifique-se de que ele esteja no ar.
+
+## 🛠 Requisitos
+- Docker & Docker Compose
+- PostgreSQL rodando localmente (usuário: `root`, senha: `root`)
+- Banco de dados `itagrest_db` criado.
 
 ## 📂 Estrutura de Documentação
 - [Épicos do Projeto](docs/epicos.md)

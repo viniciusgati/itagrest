@@ -66,6 +66,18 @@ class VendaItem(Base):
     preco_unitario = Column(Numeric(10, 2), nullable=False)
     subtotal = Column(Numeric(10, 2), nullable=False)
 
+    # --- Campos Fiscais (Snapshot do produto no momento da venda) ---
+    ncm = Column(String(8), nullable=True)
+    cest = Column(String(7), nullable=True)
+    cfop = Column(String(4), nullable=True)
+    origem = Column(String(1), default="0")
+    cst_icms = Column(String(3), nullable=True)
+    cst_pis = Column(String(2), nullable=True)
+    cst_cofins = Column(String(2), nullable=True)
+    aliquota_pis = Column(Numeric(5, 2), default=0.00)
+    aliquota_cofins = Column(Numeric(5, 2), default=0.00)
+    aliquota_icms = Column(Numeric(5, 2), default=0.00)
+
     # Relacionamentos
     venda = relationship("Venda", back_populates="itens")
     produto = relationship("app.models.produto.Produto", lazy="joined")

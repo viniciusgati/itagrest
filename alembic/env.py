@@ -5,7 +5,12 @@ from alembic import context
 
 # 1. Importar a Base e os Modelos do Projeto
 from app.db.session import Base
-from app.models.usuario import Usuario  # Adicione outros modelos aqui conforme criarmos
+from app.models.usuario import Usuario
+from app.models.empresa import Empresa
+from app.models.produto import Produto
+from app.models.venda import Venda, VendaItem
+from app.models.cliente import Cliente
+from app.models.nota_fiscal import NotaFiscal
 from app.core.config import settings
 
 # 2. Configurar os logs

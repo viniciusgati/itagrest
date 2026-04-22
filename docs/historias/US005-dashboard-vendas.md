@@ -1,7 +1,13 @@
 # US005: Dashboard de Vendas e Performance
 
 **Épico:** E5 - Retaguarda e Relatórios
-**Status:** REFINED (Pronto para Dev)
+**Status:** DONE
+
+## 📝 Change Log
+- 2026-04-16: Implementação de endpoints de estatísticas dinâmicas com suporte a filtros de 7, 15, 30 e 365 dias.
+- 2026-04-16: Adição de lógica de agrupamento inteligente no backend: diário para < 30 dias e mensal para períodos anuais.
+- 2026-04-16: Frontend com Recharts: Implementado AreaChart responsivo com gradientes e Tooltips dinâmicos.
+- 2026-04-16: Criado script de Seed Data (`seed_dashboard.py`) para gerar massa de dados histórica realista.
 
 ## 📋 Descrição
 Como administrador, quero visualizar um gráfico de desempenho das vendas diárias por produto para entender o que mais sai no meu restaurante e tomar decisões de estoque.

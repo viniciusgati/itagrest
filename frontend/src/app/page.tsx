@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import axios from 'axios'
+import api from '@/lib/api'
 
 export default function RootPage() {
   const router = useRouter()
@@ -11,7 +11,7 @@ export default function RootPage() {
     const checkStatus = async () => {
       try {
         // 1. Verificar se o sistema precisa de setup inicial
-        const resSetup = await axios.get('http://localhost:8000/api/v1/setup/status')
+        const resSetup = await api.get('/setup/status')
         
         if (resSetup.data.setup_needed) {
           router.push('/setup-admin')

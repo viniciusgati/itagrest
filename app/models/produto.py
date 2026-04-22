@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Numeric, Enum
+from sqlalchemy import Column, Integer, String, Numeric, Enum, Boolean
 from app.db.session import Base
 import enum
 
@@ -14,11 +14,14 @@ class Produto(Base):
     __tablename__ = "produtos"
 
     id = Column(Integer, primary_key=True, index=True)
+    codigo_barras = Column(String(13), nullable=True)
+    plu = Column(Integer, nullable=True)
     descricao = Column(String(255), nullable=False)
     preco_venda = Column(Numeric(10, 2), nullable=False)
     unidade = Column(String(10), default="UN")
     categoria = Column(Enum(CategoriaEnum), default=CategoriaEnum.OUTROS)
     imagem_url = Column(String(255))
+    ativo = Column(Boolean, default=True)
     
     # --- Campos Fiscais ---
     ncm = Column(String(8), nullable=False)

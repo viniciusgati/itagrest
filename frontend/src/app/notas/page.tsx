@@ -2,9 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { FileText, CheckCircle2, AlertCircle, Search, ExternalLink, Download, RefreshCcw } from 'lucide-react'
-import axios from 'axios'
-
-const API_NOTAS = 'http://localhost:8000/api/v1/notas'
+import api from '@/lib/api'
 
 export default function MonitorFiscalPage() {
   const [notas, setNotas] = useState([])
@@ -15,7 +13,7 @@ export default function MonitorFiscalPage() {
     try {
       // Nota: Precisamos de um endpoint para listar todas as notas. 
       // Vou criar no backend logo após este passo.
-      const res = await axios.get(`${API_NOTAS}/todas`)
+      const res = await api.get('/notas/todas')
       setNotas(res.data)
     } catch (err) { console.error(err) }
     finally { setLoading(false) }

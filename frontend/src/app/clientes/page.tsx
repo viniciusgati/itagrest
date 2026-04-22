@@ -2,11 +2,11 @@
 
 import { useState, useEffect } from 'react'
 import { Plus, Search, User, Edit2, Trash2, X, ArrowLeft, Loader2, Mail, Phone, FileText } from 'lucide-react'
-import axios from 'axios'
+import api from '@/lib/api'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
 
-const API_CLIENTES = 'http://localhost:8000/api/v1/clientes'
+
 
 export default function ClientesPage() {
   const [clientes, setClientes] = useState<any[]>([])
@@ -18,7 +18,7 @@ export default function ClientesPage() {
   const fetchClientes = async () => {
     setLoading(true)
     try {
-      const res = await axios.get(API_CLIENTES)
+      const res = await api.get('/clientes')
       setClientes(res.data)
     } catch (err) { console.error(err) }
     finally { setLoading(false) }
@@ -45,9 +45,9 @@ export default function ClientesPage() {
 
     try {
       if (editingCliente) {
-        await axios.put(`${API_CLIENTES}/${editingCliente.id}`, data)
+        await api.put(`/clientes/${editingCliente.id}`, data)
       } else {
-        await axios.post(API_CLIENTES, data)
+        await api.post('/clientes', data)
       }
       fetchClientes()
       closeModal()

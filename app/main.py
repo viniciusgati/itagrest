@@ -9,9 +9,6 @@ import os
 os.makedirs("storage/certs", exist_ok=True)
 os.makedirs("storage/produtos", exist_ok=True)
 
-# Criação das tabelas
-Base.metadata.create_all(bind=engine)
-
 app = FastAPI(title="iTagREST - Sistema Fiscal para Restaurantes", version="0.1.0")
 
 # Servir arquivos estáticos (Imagens de Produtos)
@@ -20,7 +17,7 @@ app.mount("/static/produtos", StaticFiles(directory="storage/produtos"), name="p
 # Configurar CORS para o Frontend Next.js
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=["http://localhost:3000", "http://localhost:3001"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

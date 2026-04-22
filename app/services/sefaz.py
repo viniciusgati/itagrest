@@ -6,17 +6,26 @@ from decimal import Decimal
 import io
 
 # Módulos de Impressão (ReportLab)
-from reportlab.pdfgen import canvas
-from reportlab.graphics.barcode import qr
+try:
+    from reportlab.pdfgen import canvas
+    from reportlab.graphics.barcode import qr
+    HAS_REPORTLAB = True
+except ImportError:
+    HAS_REPORTLAB = False
+    print("AVISO: ReportLab não encontrada. Impressão de DANFE desativada.")
 
 # Módulos modulares do ERPBrasil
 try:
     from erpbrasil.base.certificado import Certificado
     from erpbrasil.edoc.nfe import NFe 
     HAS_ERPBRASIL = True
-except ImportError:
+except ImportError as e:
     HAS_ERPBRASIL = False
-    print("AVISO: erpbrasil.edoc não encontrada.")
+    print(f"AVISO: erpbrasil.edoc não carregada corretamente: {str(e)}")
+    # Tenta um log mais profundo se possível
+except Exception as e:
+    HAS_ERPBRASIL = False
+    print(f"ERRO CRÍTICO ao carregar bibliotecas fiscais: {str(e)}")
 
 from app.models.empresa import Empresa
 from app.models.venda import Venda
@@ -56,17 +65,36 @@ class SefazService:
             prod = etree.SubElement(det, "{%s}prod" % ns)
             etree.SubElement(prod, "{%s}cProd" % ns).text = str(item.id)
             etree.SubElement(prod, "{%s}xProd" % ns).text = item.produto.descricao
-            etree.SubElement(prod, "{%s}NCM" % ns).text = item.produto.ncm
-            etree.SubElement(prod, "{%s}CFOP" % ns).text = item.produto.cfop
+            etree.SubElement(prod, "{%s}NCM" % ns).text = item.ncm or "00000000"
+            etree.SubElement(prod, "{%s}CFOP" % ns).text = item.cfop or "5102"
             etree.SubElement(prod, "{%s}uCom" % ns).text = item.produto.unidade
             etree.SubElement(prod, "{%s}qCom" % ns).text = str(item.quantidade)
             etree.SubElement(prod, "{%s}vUnCom" % ns).text = f"{item.preco_unitario:.2f}"
             etree.SubElement(prod, "{%s}vProd" % ns).text = f"{item.subtotal:.2f}"
+            if item.cest:
+                etree.SubElement(prod, "{%s}CEST" % ns).text = item.cest
+
             imposto = etree.SubElement(det, "{%s}imposto" % ns)
+            
+            # ICMS
             icms = etree.SubElement(imposto, "{%s}ICMS" % ns)
-            icms_sn = etree.SubElement(icms, "{%s}ICMSSN102" % ns)
-            etree.SubElement(icms_sn, "{%s}orig" % ns).text = item.produto.origem
-            etree.SubElement(icms_sn, "{%s}CSOSN" % ns).text = "102"
+            # Para Simples Nacional usa-se CSOSN, para Regime Normal CST
+            # Aqui simplificamos assumindo CSOSN se começar com 1, 2, 3... 
+            # ou se a empresa for CRT=1 (Simples Nacional)
+            if empresa.inscricao_estadual: # Simplificação: se tem IE e CRT=1
+                icms_sn = etree.SubElement(icms, "{%s}ICMSSN102" % ns)
+                etree.SubElement(icms_sn, "{%s}orig" % ns).text = item.origem or "0"
+                etree.SubElement(icms_sn, "{%s}CSOSN" % ns).text = item.cst_icms or "102"
+            
+            # PIS
+            pis = etree.SubElement(imposto, "{%s}PIS" % ns)
+            pis_nt = etree.SubElement(pis, "{%s}PISNT" % ns)
+            etree.SubElement(pis_nt, "{%s}CST" % ns).text = item.cst_pis or "07"
+            
+            # COFINS
+            cofins = etree.SubElement(imposto, "{%s}COFINS" % ns)
+            cofins_nt = etree.SubElement(cofins, "{%s}COFINSNT" % ns)
+            etree.SubElement(cofins_nt, "{%s}CST" % ns).text = item.cst_cofins or "07"
 
         total = etree.SubElement(nfe_root, "{%s}total" % ns)
         icms_tot = etree.SubElement(total, "{%s}ICMSTot" % ns)

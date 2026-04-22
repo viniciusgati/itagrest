@@ -1,13 +1,19 @@
 #!/bin/bash
 set -e
 
-# Aguarda o DB estar pronto se necessário (opcional com healthcheck no compose)
-echo "Aguardando inicialização do banco de dados..."
+echo "--- Iniciando iTagREST Backend ---"
+
+# Aguarda o DB estar pronto
+echo "Aguardando banco de dados (db:5432)..."
+until pg_isready -h "db" -p 5432 -U "root" > /dev/null 2>&1; do
+  sleep 2
+done
+echo "Banco de dados pronto!"
 
 # Executa as migrações do Alembic
-echo "Executando migrações do Alembic..."
+echo "Executando migrações..."
 alembic upgrade head
 
 # Inicia o servidor FastAPI
-echo "Iniciando servidor FastAPI..."
-exec uvicorn app.main:app --host 0.0.0.0 --port 8000
+echo "Iniciando Uvicorn na porta 8001..."
+exec uvicorn app.main:app --host 0.0.0.0 --port 8001

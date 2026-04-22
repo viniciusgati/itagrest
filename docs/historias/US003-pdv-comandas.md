@@ -86,7 +86,8 @@ quality_gate_tools: ["pytest", "pylint", "playwright"]
 - 2026-04-15: Implementação completa do Backend de Vendas (Models, Schemas, Endpoints).
 - 2026-04-15: Implementação da interface do PDV no Frontend com Framer Motion e QRCode.react.
 - 2026-04-15: Integração do fluxo de checkout PIX com geração de payload dinâmico.
-- 2026-04-15: Ajuste para permitir cancelamento/estorno de comandas e timeout de 1 minuto no PIX com cronômetro visual.
+- 2026-04-16: Reforço de Integridade (Blindagem): Adicionado índice único parcial (Postgres) para impedir múltiplas vendas abertas por mesa.
+- 2026-04-16: Melhoria de UX no Cardápio: Adicionado badges de quantidade em tempo real, feedback visual de "Check" ao lançar itens e estados de loading local.
 
 ### 📂 File List
 - `app/models/venda.py`

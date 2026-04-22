@@ -2,10 +2,8 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { Plus, Search, UtensilsCrossed, Beer, Edit2, Trash2, X, Upload, Check, Loader2, ArrowLeft } from 'lucide-react'
-import axios from 'axios'
 import Link from 'next/link'
-
-const API_URL = 'http://localhost:8000/api/v1/produtos'
+import api, { getImageUrl } from '@/lib/api'
 
 export default function CardapioPage() {
   const [produtos, setProdutos] = useState<any[]>([])
@@ -21,7 +19,7 @@ export default function CardapioPage() {
   const fetchProdutos = async () => {
     setLoading(true)
     try {
-      const res = await axios.get(API_URL)
+      const res = await api.get('/produtos')
       setProdutos(res.data)
     } catch (err) { console.error(err) }
     finally { setLoading(false) }
@@ -33,7 +31,7 @@ export default function CardapioPage() {
 
   const openModal = (produto: any = null) => {
     setEditingProduto(produto)
-    setPreviewImage(produto?.imagem_url ? `http://localhost:8000${produto.imagem_url}` : null)
+    setPreviewImage(getImageUrl(produto?.imagem_url))
     setIsModalOpen(true)
   }
 
@@ -67,16 +65,16 @@ export default function CardapioPage() {
     try {
       let produtoId = editingProduto?.id
       if (editingProduto) {
-        await axios.put(`${API_URL}/${editingProduto.id}`, data)
+        await api.put(`/produtos/${editingProduto.id}`, data)
       } else {
-        const res = await axios.post(API_URL, data)
+        const res = await api.post('/produtos', data)
         produtoId = res.data.id
       }
 
       if (selectedFile && produtoId) {
         const imgData = new FormData()
         imgData.append('file', selectedFile)
-        await axios.post(`${API_URL}/${produtoId}/upload-imagem`, imgData)
+        await api.post(`/produtos/${produtoId}/upload-imagem`, imgData)
       }
 
       fetchProdutos()
@@ -87,7 +85,7 @@ export default function CardapioPage() {
   const handleDelete = async (id: number) => {
     if (!confirm('Excluir este produto?')) return
     try {
-      await axios.delete(`${API_URL}/${id}`)
+      await api.delete(`/produtos/${id}`)
       fetchProdutos()
     } catch (err) { console.error(err) }
   }
@@ -99,7 +97,7 @@ export default function CardapioPage() {
     const formData = new FormData()
     formData.append('file', file)
     try {
-      await axios.post(`${API_URL}/importar-xml`, formData)
+      await api.post('/produtos/importar-xml', formData)
       fetchProdutos()
       alert("Importação concluída!")
     } catch (err) {
@@ -258,7 +256,7 @@ function ProdutoCard({ produto, onEdit, onDelete }: any) {
   return (
     <div className="bg-white dark:bg-slate-800 rounded-[2.5rem] border border-slate-100 dark:border-slate-700 shadow-xl overflow-hidden group hover:shadow-2xl transition-all flex flex-col text-slate-900 dark:text-white">
       <div className="h-48 relative overflow-hidden bg-slate-50 dark:bg-slate-900">
-        {produto.imagem_url ? <img src={`http://localhost:8000${produto.imagem_url}`} alt={produto.descricao} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" /> : (
+        {produto.imagem_url ? <img src={getImageUrl(produto.imagem_url)} alt={produto.descricao} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" /> : (
           <div className="w-full h-full bg-gradient-to-br from-brand-500 to-violet-600 flex items-center justify-center text-white text-4xl font-black opacity-80">{getPlaceholder(produto.descricao)}</div>
         )}
         <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-all translate-y-2 group-hover:translate-y-0">

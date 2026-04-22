@@ -9,6 +9,8 @@ class CategoriaEnum(str, Enum):
     OUTROS = "OUTROS"
 
 class ProdutoBase(BaseModel):
+    codigo_barras: Optional[str] = Field(None, max_length=13)
+    plu: Optional[int] = None
     descricao: str = Field(..., min_length=3, max_length=255)
     preco_venda: Decimal = Field(..., gt=0)
     unidade: str = Field("UN", max_length=10)
@@ -24,11 +26,14 @@ class ProdutoBase(BaseModel):
     aliquota_cofins: Decimal = Field(Decimal("0.00"))
     aliquota_icms: Decimal = Field(Decimal("0.00"))
     imagem_url: Optional[str] = None
+    ativo: bool = True
 
 class ProdutoCreate(ProdutoBase):
     pass
 
 class ProdutoUpdate(BaseModel):
+    codigo_barras: Optional[str] = Field(None, max_length=13)
+    plu: Optional[int] = None
     descricao: Optional[str] = Field(None, min_length=3, max_length=255)
     preco_venda: Optional[Decimal] = Field(None, gt=0)
     unidade: Optional[str] = Field(None, max_length=10)
@@ -44,6 +49,7 @@ class ProdutoUpdate(BaseModel):
     aliquota_cofins: Optional[Decimal] = None
     aliquota_icms: Optional[Decimal] = None
     imagem_url: Optional[str] = None
+    ativo: Optional[bool] = None
 
 class Produto(ProdutoBase):
     id: int

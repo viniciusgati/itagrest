@@ -13,9 +13,7 @@ import {
   Loader2,
   Lock
 } from 'lucide-react'
-import axios from 'axios'
-
-const API_URL = 'http://localhost:8000/api/v1/empresa'
+import api from '@/lib/api'
 
 export default function WizardFiscal() {
   const [step, setStep] = useState(1)
@@ -46,7 +44,7 @@ export default function WizardFiscal() {
   useEffect(() => {
     const loadEmpresa = async () => {
       try {
-        const res = await axios.get(`${API_URL}/status`)
+        const res = await api.get('/empresa/status')
         if (res.data.empresa) {
           setFormData(prev => ({
             ...prev,
@@ -76,7 +74,7 @@ export default function WizardFiscal() {
       const cleanCep = formData.cep.replace(/\D/g, '')
 
       // 1. Salvar dados da empresa
-      await axios.post(`${API_URL}/configurar`, {
+      await api.post('/empresa/configurar', {
         ...formData,
         cnpj: cleanCnpj,
         cep: cleanCep || null,
@@ -92,7 +90,7 @@ export default function WizardFiscal() {
         uploadData.append('file', certificadoFile)
         uploadData.append('senha', formData.certificado_senha)
 
-        await axios.post(`${API_URL}/upload-certificado`, uploadData, {
+        await api.post('/empresa/upload-certificado', uploadData, {
           headers: { 'Content-Type': 'multipart/form-data' }
         })
       }

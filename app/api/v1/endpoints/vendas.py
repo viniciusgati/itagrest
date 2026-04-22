@@ -111,7 +111,18 @@ def adicionar_item(venda_id: int, item_in: VendaItemCreate, db: Session = Depend
         produto_id=item_in.produto_id,
         quantidade=item_in.quantidade,
         preco_unitario=produto.preco_venda,
-        subtotal=subtotal
+        subtotal=subtotal,
+        # Snapshot fiscal
+        ncm=produto.ncm,
+        cest=produto.cest,
+        cfop=produto.cfop,
+        origem=produto.origem,
+        cst_icms=produto.cst_icms,
+        cst_pis=produto.cst_pis,
+        cst_cofins=produto.cst_cofins,
+        aliquota_pis=produto.aliquota_pis,
+        aliquota_cofins=produto.aliquota_cofins,
+        aliquota_icms=produto.aliquota_icms
     )
     db.add(new_item)
     venda.total = Decimal(venda.total) + subtotal
@@ -175,20 +186,58 @@ def cancelar_item(venda_id: int, item_id: int, db: Session = Depends(get_db)):
     return db.query(VendaModel).options(joinedload(VendaModel.itens), joinedload(VendaModel.cliente)).filter(VendaModel.id == venda_id).first()
 
 @router.get("/stats/resumo")
-def get_venda_resumo(db: Session = Depends(get_db)):
-    hoje = datetime.utcnow().date()
-    vendas = db.query(VendaModel).filter(func.date(VendaModel.data_abertura) == hoje, VendaModel.status == StatusVenda.PAGA).all()
+def get_venda_resumo(dias: int = 7, db: Session = Depends(get_db)):
+    # Data de início baseada no filtro
+    inicio = datetime.utcnow() - timedelta(days=dias)
+    vendas = db.query(VendaModel).filter(
+        VendaModel.data_abertura >= inicio, 
+        VendaModel.status == StatusVenda.PAGA
+    ).all()
+    
     total = sum(v.total for v in vendas)
     qtd = len(vendas)
-    return {"total_faturado": total, "qtd_vendas": qtd, "ticket_medio": total/qtd if qtd > 0 else 0}
+    return {
+        "total_faturado": total, 
+        "qtd_vendas": qtd, 
+        "ticket_medio": total/qtd if qtd > 0 else 0
+    }
 
-@router.get("/stats/faturamento-diario")
-def get_faturamento_diario(db: Session = Depends(get_db)):
-    sete_dias = datetime.utcnow() - timedelta(days=7)
-    res = db.query(func.date(VendaModel.data_abertura).label('dia'), func.sum(VendaModel.total).label('total')).filter(VendaModel.data_abertura >= sete_dias, VendaModel.status == StatusVenda.PAGA).group_by(func.date(VendaModel.data_abertura)).all()
-    return [{"dia": r.dia, "total": r.total} for r in res]
+@router.get("/stats/faturamento-periodo")
+def get_faturamento_periodo(dias: int = 7, db: Session = Depends(get_db)):
+    """Retorna o faturamento agrupado por dia ou mês dependendo do período."""
+    inicio = datetime.utcnow() - timedelta(days=dias)
+    
+    if dias > 30:
+        # Agrupamento mensal para períodos longos (1 ano)
+        # strftime ou date_trunc dependendo do banco. Para Postgres:
+        res = db.query(
+            func.to_char(VendaModel.data_abertura, 'YYYY-MM').label('periodo'), 
+            func.sum(VendaModel.total).label('total')
+        ).filter(
+            VendaModel.data_abertura >= inicio, 
+            VendaModel.status == StatusVenda.PAGA
+        ).group_by('periodo').order_by('periodo').all()
+    else:
+        # Agrupamento diário
+        res = db.query(
+            func.date(VendaModel.data_abertura).label('periodo'), 
+            func.sum(VendaModel.total).label('total')
+        ).filter(
+            VendaModel.data_abertura >= inicio, 
+            VendaModel.status == StatusVenda.PAGA
+        ).group_by('periodo').order_by('periodo').all()
+        
+    return [{"periodo": str(r.periodo), "total": float(r.total)} for r in res]
 
 @router.get("/stats/top-produtos")
-def get_top_produtos(db: Session = Depends(get_db)):
-    res = db.query(ProdutoModel.descricao, func.sum(VendaItemModel.quantidade).label('qtd')).join(VendaItemModel).join(VendaModel).filter(VendaModel.status == StatusVenda.PAGA).group_by(ProdutoModel.id).order_by(func.sum(VendaItemModel.quantidade).desc()).limit(5).all()
-    return [{"produto": r.descricao, "qtd": r.qtd} for r in res]
+def get_top_produtos(dias: int = 7, db: Session = Depends(get_db)):
+    inicio = datetime.utcnow() - timedelta(days=dias)
+    res = db.query(
+        ProdutoModel.descricao, 
+        func.sum(VendaItemModel.quantidade).label('qtd')
+    ).join(VendaItemModel).join(VendaModel).filter(
+        VendaModel.data_abertura >= inicio,
+        VendaModel.status == StatusVenda.PAGA
+    ).group_by(ProdutoModel.id).order_by(func.sum(VendaItemModel.quantidade).desc()).limit(5).all()
+    
+    return [{"produto": r.descricao, "qtd": int(r.qtd)} for r in res]

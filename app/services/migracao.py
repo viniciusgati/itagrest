@@ -25,6 +25,15 @@ class MigracaoService:
                 unidade_node = p_node.find('Un')
                 unidade = unidade_node.text.strip() if unidade_node is not None and unidade_node.text else "UN"
                 
+                codigo_node = p_node.find('Codigo')
+                codigo = codigo_node.text.strip() if codigo_node is not None and codigo_node.text else None
+                
+                plu_node = p_node.find('Plu')
+                plu_val = None
+                if plu_node is not None and plu_node.text:
+                    try: plu_val = int(plu_node.text.strip())
+                    except: pass
+
                 # Parsing da string CST: "NCM;CST_ICMS;CST_PIS;ORIGEM;CST_COFINS;ALIQ_PIS;ALIQ_COF;CEST;"
                 cst_node = p_node.find('CST')
                 cst_raw = cst_node.text if cst_node is not None else ""
@@ -71,6 +80,8 @@ class MigracaoService:
                     produto = Produto(descricao=descricao)
                     db.add(produto)
                 
+                produto.codigo_barras = codigo
+                produto.plu = plu_val
                 produto.preco_venda = preco_venda
                 produto.unidade = unidade
                 produto.categoria = categoria
@@ -83,6 +94,7 @@ class MigracaoService:
                 produto.aliquota_pis = aliquota_pis
                 produto.aliquota_cofins = aliquota_cofins
                 produto.cest = cest.strip()[:7] if cest else None
+                produto.ativo = True
                 
                 count += 1
             except Exception as p_err:

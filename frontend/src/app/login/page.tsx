@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { Lock, User, Loader2, ArrowRight } from 'lucide-react'
-import axios from 'axios'
+import api from '@/lib/api'
 
 export default function Login() {
   const [formData, setFormData] = useState({ username: '', password: '' })
@@ -19,7 +19,7 @@ export default function Login() {
     params.append('password', formData.password)
 
     try {
-      const response = await axios.post('http://localhost:8000/api/v1/auth/login', params, {
+      const response = await api.post('/auth/login', params, {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
       })
       
