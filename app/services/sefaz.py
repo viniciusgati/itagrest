@@ -31,6 +31,7 @@ ERP_IMPORT_ERROR = ""
 try:
     from erpbrasil.assinatura.certificado import Certificado
     from erpbrasil.edoc.nfe import NFe 
+    from erpbrasil.edoc.nfce import NFCe
     from erpbrasil.transmissao import TransmissaoSOAP
     from nfelib.v4_00 import leiauteNFe as nfe
     from cryptography.hazmat.primitives import serialization
@@ -383,13 +384,14 @@ class SefazService:
                     }
                     uf_ibge = uf_codes.get(empresa.uf.upper(), 35)
 
-                    edoc = NFe(
+                    edoc = NFCe(
                         transmissao=transmissao,
                         uf=uf_ibge,
                         ambiente=str(empresa.ambiente), 
                         mod='65',
-                        csc=empresa.csc_token,
-                        cidtoken=empresa.csc_id
+                        csc_token=empresa.csc_id,
+                        csc_code=empresa.csc_token,
+                        envio_sincrono=True
                     )
                     
                     # TRANSMISSÃO REAL ATIVADA

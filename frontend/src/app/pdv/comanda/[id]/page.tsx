@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { 
   ArrowLeft, Search, Plus, Trash2, 
   CreditCard, X, Check, Loader2, DollarSign, 
-  QrCode, Utensils, ShoppingBag, User, UserPlus, Printer
+  QrCode, Utensils, ShoppingBag, User, UserPlus, Printer, FileText
 } from 'lucide-react'
 import api, { getImageUrl } from '@/lib/api'
 import { motion, AnimatePresence } from 'framer-motion'
