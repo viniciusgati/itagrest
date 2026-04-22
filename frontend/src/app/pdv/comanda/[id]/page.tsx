@@ -97,20 +97,32 @@ export default function ComandaMobilePage() {
   }
 
   const handleFecharMesa = async (forma: string) => {
-    setIsEmitting(forma === 'DINHEIRO')
+    setIsEmitting(true)
+    setError('')
     try {
+      // 1. Primeiro garante o fechamento da venda no banco (independente da nota)
       const res = await api.put(`/vendas/${venda.id}/fechar`, {
         forma_pagamento: forma,
         status: forma === 'PIX' ? 'AGUARDANDO_PAGAMENTO' : 'PAGA'
       })
       setVenda(res.data)
+      
+      // 2. Tenta emitir a nota se for dinheiro (fluxo automático)
       if (forma === 'DINHEIRO') {
         const resNota = await api.post(`/notas/emitir/${venda.id}`)
         setFiscalStatus(resNota.data)
+      } else {
+        // Se for PIX ou outro, apenas fecha o modal e volta pro mapa
+        router.push('/pdv')
       }
     } catch (err: any) {
-      setError(err.response?.data?.detail || "Erro no fechamento")
-    } finally { setIsEmitting(false) }
+      console.error("Erro no fechamento:", err)
+      // Se a venda fechou mas a nota deu erro, res.data existirá mas resNota não.
+      // O backend agora retorna a nota com erro em vez de 400, então fiscalStatus terá o erro.
+      setError("Mesa fechada, mas houve uma falha na comunicação SEFAZ.")
+    } finally { 
+      setIsEmitting(false) 
+    }
   }
 
   const getItensAgrupados = () => {
@@ -233,14 +245,38 @@ export default function ComandaMobilePage() {
                 <div className="py-10 text-center space-y-6"><Loader2 className="w-16 h-16 text-brand-600 animate-spin mx-auto" /><p className="font-black dark:text-white uppercase tracking-widest text-xs">Comunicando SEFAZ...</p></div>
               ) : fiscalStatus ? (
                 <div className="py-10 text-center space-y-6">
-                  <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-600 mx-auto"><Check className="w-10 h-10" /></div>
-                  <p className="text-xl font-black text-emerald-600 uppercase">Autorizada!</p>
-                  <button 
-                    onClick={() => window.open(getImageUrl(`/api/v1/notas/${venda.id}/imprimir`), '_blank')}
-                    className="w-full mt-4 bg-slate-900 dark:bg-brand-600 text-white py-4 rounded-2xl font-black uppercase tracking-widest text-xs flex items-center justify-center gap-3"
-                  >
-                    <Printer className="w-5 h-5" /> Imprimir Cupom
-                  </button>
+                  {fiscalStatus.status_sefaz === '100' ? (
+                    <>
+                      <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-600 mx-auto"><Check className="w-10 h-10" /></div>
+                      <p className="text-xl font-black text-emerald-600 uppercase">Autorizada!</p>
+                      <button 
+                        onClick={() => { window.open(getImageUrl(`/api/v1/notas/${venda.id}/imprimir`), '_blank'); router.push('/pdv') }}
+                        className="w-full mt-4 bg-slate-900 dark:bg-brand-600 text-white py-4 rounded-2xl font-black uppercase tracking-widest text-xs flex items-center justify-center gap-3"
+                      >
+                        <Printer className="w-5 h-5" /> Imprimir Cupom
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <div className="w-20 h-20 bg-rose-100 rounded-full flex items-center justify-center text-rose-600 mx-auto"><X className="w-10 h-10" /></div>
+                      <p className="text-xl font-black text-rose-600 uppercase">Falha na Nota</p>
+                      <p className="text-slate-500 text-xs font-medium px-4">{fiscalStatus.motivo_sefaz || "Erro desconhecido na SEFAZ"}</p>
+                      <div className="grid grid-cols-2 gap-4 mt-6">
+                        <button 
+                          onClick={() => router.push(`/notas/${venda.id}`)}
+                          className="bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-white py-4 rounded-2xl font-black uppercase tracking-widest text-[10px] flex items-center justify-center gap-2"
+                        >
+                          <FileText className="w-4 h-4" /> Detalhes/Logs
+                        </button>
+                        <button 
+                          onClick={() => router.push('/pdv')}
+                          className="bg-slate-900 dark:bg-brand-600 text-white py-4 rounded-2xl font-black uppercase tracking-widest text-[10px]"
+                        >
+                          Mapa de Mesas
+                        </button>
+                      </div>
+                    </>
+                  )}
                 </div>
               ) : (
                 <div className="grid grid-cols-1 gap-4">

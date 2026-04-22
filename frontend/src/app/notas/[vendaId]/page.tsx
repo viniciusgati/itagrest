@@ -45,10 +45,16 @@ export default function NotaFiscalDetailPage() {
     try {
       const res = await api.post(`/notas/emitir/${vendaId}`)
       setNota(res.data)
-      alert("Processamento concluído! Verifique os logs.")
+      
+      if (res.data.status_sefaz === '100') {
+        alert("Nota Autorizada com Sucesso!")
+        router.push('/vendas')
+      } else {
+        alert("Processamento concluído com o status: " + res.data.status_sefaz + ". Verifique os logs.")
+      }
     } catch (err: any) {
-      alert("Erro no processamento: " + (err.response?.data?.detail || err.message))
-      // Atualiza para ver os logs do erro
+      alert("Erro no processamento SEFAZ. A nota pode não ter sido emitida.")
+      // Recarrega os dados para mostrar os logs do erro na tela
       fetchData()
     } finally {
       setEmitting(false)

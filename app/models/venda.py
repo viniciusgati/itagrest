@@ -37,7 +37,7 @@ class Venda(Base):
 
     # Relacionamentos
     cliente_id = Column(Integer, ForeignKey("clientes.id"), nullable=True)
-    cliente = relationship("app.models.cliente.Cliente", back_populates="vendas")
+    cliente = relationship("Cliente", back_populates="vendas")
     
     itens = relationship("VendaItem", back_populates="venda", cascade="all, delete-orphan")
 
@@ -80,4 +80,4 @@ class VendaItem(Base):
 
     # Relacionamentos
     venda = relationship("Venda", back_populates="itens")
-    produto = relationship("app.models.produto.Produto", lazy="joined")
+    produto = relationship("Produto", lazy="joined")

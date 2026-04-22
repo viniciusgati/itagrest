@@ -1,4 +1,7 @@
 import os
+# Força o OpenSSL a carregar o provedor legacy
+os.environ["OPENSSL_CONF"] = "/app/openssl_legacy.cnf"
+
 from lxml import etree
 from sqlalchemy.orm import Session
 from datetime import datetime
@@ -21,6 +24,29 @@ ERP_IMPORT_ERROR = ""
 try:
     from erpbrasil.assinatura.certificado import Certificado
     from erpbrasil.edoc.nfe import NFe 
+    from erpbrasil.transmissao import TransmissaoSOAP
+    from nfelib.v4_00 import leiauteNFe as nfe
+    from cryptography.hazmat.primitives import serialization
+    
+    # MONKEY PATCH REFORÇADO (Testado em ambiente de debug)
+    # Remove o prefixo 'editix:' que a nfelib insiste em colocar por default
+    def apply_brutal_patch(module):
+        def wrap_export(old_export):
+            def new_export(self, outfile, level, namespace_='', name_=None, namespacedef_='xmlns="http://www.portalfiscal.inf.br/nfe"', pretty_print=True):
+                buf = io.StringIO()
+                old_export(self, buf, level, namespace_='', name_=name_, namespacedef_=namespacedef_, pretty_print=pretty_print)
+                content = buf.getvalue()
+                content = content.replace('editix:', '')
+                content = content.replace('xmlns:editix="http://www.portalfiscal.inf.br/nfe"', '')
+                outfile.write(content)
+            return new_export
+
+        for name in dir(module):
+            obj = getattr(module, name)
+            if isinstance(obj, type) and hasattr(obj, 'export'):
+                obj.export = wrap_export(obj.export)
+
+    apply_brutal_patch(nfe)
     HAS_ERPBRASIL = True
 except ImportError as e:
     HAS_ERPBRASIL = False
@@ -36,76 +62,133 @@ from app.core.logging import log_sefaz_evento, log_xml_auditoria
 
 class SefazService:
     @staticmethod
-    def _montar_xml_nfce(empresa: Empresa, venda: Venda, chave_acesso: str) -> str:
-        """Gera o XML básico da NFC-e (Modelo 65)."""
-        ns = "http://www.portalfiscal.inf.br/nfe"
-        nfe_root = etree.Element("{%s}infNFe" % ns, versao="4.00", Id=f"NFe{chave_acesso}")
+    def _montar_xml_nfce(empresa: Empresa, venda: Venda, chave_acesso: str):
+        """Gera o objeto da NFC-e (Modelo 65) usando as classes oficiais da nfelib."""
         
-        ide = etree.SubElement(nfe_root, "{%s}ide" % ns)
-        etree.SubElement(ide, "{%s}cUF" % ns).text = "35"
-        etree.SubElement(ide, "{%s}natOp" % ns).text = "VENDA"
-        etree.SubElement(ide, "{%s}mod" % ns).text = "65"
-        etree.SubElement(ide, "{%s}serie" % ns).text = "1"
-        etree.SubElement(ide, "{%s}nNF" % ns).text = str(venda.id)
-        etree.SubElement(ide, "{%s}dhEmi" % ns).text = datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S-03:00')
-        etree.SubElement(ide, "{%s}tpAmb" % ns).text = str(empresa.ambiente)
+        # 1. Identificação (ide)
+        ide = nfe.ideType(
+            cUF='35', 
+            natOp="VENDA",
+            mod='65', 
+            serie='1',
+            nNF=str(venda.id),
+            dhEmi=datetime.now().strftime('%Y-%m-%dT%H:%M:%S-03:00'),
+            tpAmb=str(empresa.ambiente),
+            tpImp='4', 
+            tpEmis='1', 
+            cDV=str(chave_acesso[-1]),
+            cNF=str(venda.id).zfill(8), 
+            idDest='1', 
+            indFinal='1', 
+            indPres='1', 
+            procEmi='0', 
+            verProc="1.0.0",
+            tpNF='1',
+            cMunFG='3550308'
+        )
         
-        emit = etree.SubElement(nfe_root, "{%s}emit" % ns)
-        etree.SubElement(emit, "{%s}CNPJ" % ns).text = empresa.cnpj
-        etree.SubElement(emit, "{%s}xNome" % ns).text = empresa.razao_social
-        etree.SubElement(emit, "{%s}IE" % ns).text = empresa.inscricao_estadual
-        etree.SubElement(emit, "{%s}CRT" % ns).text = "1"
+        # 2. Emitente (emit)
+        emit = nfe.emitType(
+            CNPJ=empresa.cnpj,
+            xNome=empresa.razao_social,
+            IE=empresa.inscricao_estadual,
+            CRT='1',
+            enderEmit=nfe.TEnderEmi(
+                xLgr="AVENIDA PAULISTA",
+                nro="1000",
+                xBairro="BELA VISTA",
+                cMun='3550308',
+                xMun="SAO PAULO",
+                UF=str(empresa.uf).upper(),
+                CEP="01310100",
+                cPais='1058',
+                xPais="BRASIL"
+            )
+        )
         
+        # 3. Destinatário (dest)
+        dest = None
         if venda.cliente:
-            dest = etree.SubElement(nfe_root, "{%s}dest" % ns)
-            etree.SubElement(dest, "{%s}CNPJ" % ns if len(venda.cliente.documento) > 11 else "{%s}CPF" % ns).text = venda.cliente.documento
-            etree.SubElement(dest, "{%s}xNome" % ns).text = venda.cliente.nome
-            etree.SubElement(dest, "{%s}indIEDest" % ns).text = "9"
+            dest = nfe.destType(
+                xNome=venda.cliente.nome,
+                indIEDest='9',
+            )
+            if len(venda.cliente.documento) > 11:
+                dest.CNPJ = venda.cliente.documento
+            else:
+                dest.CPF = venda.cliente.documento
 
+        # 4. Itens (det)
+        itens_det = []
         for i, item in enumerate(venda.itens):
-            det = etree.SubElement(nfe_root, "{%s}det" % ns, nItem=str(i+1))
-            prod = etree.SubElement(det, "{%s}prod" % ns)
-            etree.SubElement(prod, "{%s}cProd" % ns).text = str(item.id)
-            etree.SubElement(prod, "{%s}xProd" % ns).text = item.produto.descricao
-            etree.SubElement(prod, "{%s}NCM" % ns).text = item.ncm or "00000000"
-            etree.SubElement(prod, "{%s}CFOP" % ns).text = item.cfop or "5102"
-            etree.SubElement(prod, "{%s}uCom" % ns).text = item.produto.unidade
-            etree.SubElement(prod, "{%s}qCom" % ns).text = str(item.quantidade)
-            etree.SubElement(prod, "{%s}vUnCom" % ns).text = f"{item.preco_unitario:.2f}"
-            etree.SubElement(prod, "{%s}vProd" % ns).text = f"{item.subtotal:.2f}"
-            if item.cest:
-                etree.SubElement(prod, "{%s}CEST" % ns).text = item.cest
+            imposto = nfe.impostoType(
+                ICMS=nfe.ICMSType(
+                    ICMSSN102=nfe.ICMSSN102Type(
+                        orig=str(item.origem or '0'),
+                        CSOSN='102'
+                    )
+                ),
+                PIS=nfe.PISType(
+                    PISNT=nfe.PISNTType(CST='07')
+                ),
+                COFINS=nfe.COFINSType(
+                    COFINSNT=nfe.COFINSNTType(CST='07')
+                )
+            )
 
-            imposto = etree.SubElement(det, "{%s}imposto" % ns)
-            
-            # ICMS
-            icms = etree.SubElement(imposto, "{%s}ICMS" % ns)
-            if empresa.inscricao_estadual:
-                icms_sn = etree.SubElement(icms, "{%s}ICMSSN102" % ns)
-                etree.SubElement(icms_sn, "{%s}orig" % ns).text = item.origem or "0"
-                etree.SubElement(icms_sn, "{%s}CSOSN" % ns).text = item.cst_icms or "102"
-            
-            # PIS
-            pis = etree.SubElement(imposto, "{%s}PIS" % ns)
-            pis_nt = etree.SubElement(pis, "{%s}PISNT" % ns)
-            etree.SubElement(pis_nt, "{%s}CST" % ns).text = item.cst_pis or "07"
-            
-            # COFINS
-            cofins = etree.SubElement(imposto, "{%s}COFINS" % ns)
-            cofins_nt = etree.SubElement(cofins, "{%s}COFINSNT" % ns)
-            etree.SubElement(cofins_nt, "{%s}CST" % ns).text = item.cst_cofins or "07"
+            det = nfe.detType(
+                nItem=str(i+1),
+                prod=nfe.prodType(
+                    cProd=str(item.id),
+                    cEAN="",
+                    xProd=item.produto.descricao,
+                    NCM=item.ncm or "00000000",
+                    CFOP=str(item.cfop or "5102"),
+                    uCom=item.produto.unidade,
+                    qCom=f"{item.quantidade:.4f}",
+                    vUnCom=f"{item.preco_unitario:.4f}",
+                    vProd=f"{item.subtotal:.2f}",
+                    cEANTrib="",
+                    uTrib=item.produto.unidade,
+                    qTrib=f"{item.quantidade:.4f}",
+                    vUnTrib=f"{item.preco_unitario:.4f}",
+                    indTot='1'
+                ),
+                imposto=imposto
+            )
+            itens_det.append(det)
 
-        total = etree.SubElement(nfe_root, "{%s}total" % ns)
-        icms_tot = etree.SubElement(total, "{%s}ICMSTot" % ns)
-        etree.SubElement(icms_tot, "{%s}vNF" % ns).text = f"{venda.total:.2f}"
+        # 5. Totais e Pagamento
+        total = nfe.totalType(
+            ICMSTot=nfe.ICMSTotType(
+                vBC="0.00", vICMS="0.00", vICMSDeson="0.00", vFCP="0.00", vBCST="0.00",
+                vST="0.00", vFCPST="0.00", vFCPSTRet="0.00", vProd=f"{venda.total:.2f}",
+                vFrete="0.00", vSeg="0.00", vDesc="0.00", vII="0.00", vIPI="0.00",
+                vIPIDevol="0.00", vPIS="0.00", vCOFINS="0.00", vOutro="0.00",
+                vNF=f"{venda.total:.2f}"
+            )
+        )
+        
+        pag = nfe.pagType(
+            detPag=[nfe.detPagType(
+                tPag='01' if venda.forma_pagamento == "DINHEIRO" else '17',
+                vPag=f"{venda.total:.2f}"
+            )]
+        )
 
-        pag = etree.SubElement(nfe_root, "{%s}pag" % ns)
-        det_pag = etree.SubElement(pag, "{%s}detPag" % ns)
-        etree.SubElement(det_pag, "{%s}tPag" % ns).text = "01" if venda.forma_pagamento == "DINHEIRO" else "17"
-        etree.SubElement(det_pag, "{%s}vPag" % ns).text = f"{venda.total:.2f}"
-
-        xml_final = etree.tostring(nfe_root, encoding='unicode')
-        return xml_final
+        # 6. Montagem Final
+        inf_nfe_data = nfe.infNFeType(
+            Id=f"NFe{chave_acesso}",
+            versao="4.00",
+            ide=ide,
+            emit=emit,
+            dest=dest,
+            det=itens_det,
+            total=total,
+            pag=pag
+        )
+        
+        return nfe.TNFe(infNFe=inf_nfe_data)
 
     @staticmethod
     def gerar_danfe_pdf(db: Session, venda_id: int) -> io.BytesIO:
@@ -134,7 +217,6 @@ class SefazService:
 
     @staticmethod
     def _mock_retorno_sucesso(db: Session, venda: Venda, motivo: str):
-        """Gera um registro de nota fiscal mockado para segurança."""
         from app.models.empresa import Empresa
         empresa = db.query(Empresa).first()
         status_sefaz, protocolo = "100", "135230000000001"
@@ -147,10 +229,13 @@ class SefazService:
         nota.chave_acesso, nota.numero_nota, nota.serie_nota, nota.protocolo = chave, venda.id, 1, protocolo
         nota.status_sefaz, nota.motivo_sefaz = status_sefaz, motivo
         
-        # XML Mockado para auditoria
-        xml_string = SefazService._montar_xml_nfce(empresa, venda, chave)
+        nfe_obj = SefazService._montar_xml_nfce(empresa, venda, chave)
+        output = io.StringIO()
+        nfe_obj.export(output, 0, name_='TNFe', namespacedef_='xmlns="http://www.portalfiscal.inf.br/nfe"')
+        xml_string = output.getvalue()
+
         nota.xml_autorizado = xml_string
-        nota.logs_transmissao = f"[{datetime.utcnow().isoformat()}] MOCK_MODE: Emissão simulada com sucesso.\n"
+        nota.logs_transmissao = f"[{datetime.now().isoformat()}] MOCK_MODE: Emissão simulada com sucesso.\n"
         
         db.commit(); db.refresh(nota)
         return nota
@@ -160,7 +245,6 @@ class SefazService:
         """Fluxo real de Emissão SEFAZ com Trava de Segurança."""
         from app.core.config import settings
         
-        # 1. Garante que o registro da NotaFiscal existe no banco antes de tudo
         nota = db.query(NotaFiscalModel).filter(NotaFiscalModel.venda_id == venda.id).first()
         if not nota:
             nota = NotaFiscalModel(venda_id=venda.id, status_sefaz="PENDENTE", motivo_sefaz="Iniciando emissão")
@@ -168,81 +252,131 @@ class SefazService:
             db.commit()
             db.refresh(nota)
             
-        # Inicia logs de transmissão
-        logs = f"[{datetime.utcnow().isoformat()}] INICIO: Processando emissão da Venda {venda.id}\n"
+        logs = f"[{datetime.now().isoformat()}] INICIO: Processando emissão da Venda {venda.id} (v_fix_brutal_patch_013)\n"
         
-        # TRAVA DE SEGURANÇA MÁXIMA: Nunca transmite se for ambiente de teste
         if settings.ENV == "test":
             log_sefaz_evento(venda.id, "TEST_MODE", "Transmissão bloqueada por ambiente de teste.")
             return SefazService._mock_retorno_sucesso(db, venda, "Ambiente de Teste (Bloqueio de Transmissão)")
 
         empresa = db.query(Empresa).first()
         if not empresa or not empresa.configurado: 
-            nota.logs_transmissao = logs + f"[{datetime.utcnow().isoformat()}] ERRO: Empresa não configurada.\n"
+            nota.logs_transmissao = logs + f"[{datetime.now().isoformat()}] ERRO: Empresa não configurada.\n"
             nota.status_sefaz = "ERRO"
             nota.motivo_sefaz = "Empresa não configurada"
             db.commit()
             raise Exception("Empresa não configurada.")
         
-        logs += f"[{datetime.utcnow().isoformat()}] EMPRESA: {empresa.razao_social} | CNPJ: {empresa.cnpj}\n"
+        logs += f"[{datetime.now().isoformat()}] EMPRESA: {empresa.razao_social} | CNPJ: {empresa.cnpj}\n"
         
         try:
-            # Lógica robusta de localização de certificado
             cert_path = empresa.certificado_path
             if not os.path.exists(cert_path):
                 cert_path = os.path.join("storage/certs", os.path.basename(empresa.certificado_path))
             
             if not os.path.exists(cert_path):
-                 raise Exception(f"Certificado não encontrado em: {empresa.certificado_path} ou {cert_path}")
+                 raise Exception(f"Certificado não encontrado.")
                  
             with open(cert_path, "rb") as f: pfx_data = f.read()
             
-            # Valores Padrão (Fallback se não transmitir ou HAS_ERPBRASIL=False)
+            import binascii
+            file_head = binascii.hexlify(pfx_data[:4]).decode()
+            logs += f"[{datetime.now().isoformat()}] PFX_INFO: Size={len(pfx_data)} | Head={file_head} | PassLen={len(empresa.certificado_senha or '')}\n"
+            
             status_sefaz, motivo_sefaz, protocolo = "100", "Autorizado (Offline/Fallback)", "135230000000001"
             cnpj_14 = empresa.cnpj.zfill(14)
-            data_aa_mm = datetime.utcnow().strftime('%y%m')
+            data_aa_mm = datetime.now().strftime('%y%m')
             chave = f"35{data_aa_mm}{cnpj_14}65001{venda.id:09}1{venda.id:08}0"[:44]
-            xml_string = SefazService._montar_xml_nfce(empresa, venda, chave)
-            logs += f"[{datetime.utcnow().isoformat()}] XML_GERADO: Chave {chave}\n"
+            
+            # MONTAGEM DO OBJETO DA NOTA
+            nfe_obj = SefazService._montar_xml_nfce(empresa, venda, chave)
+            logs += f"[{datetime.now().isoformat()}] OBJETO_GERADO: Chave {chave}\n"
 
             if HAS_ERPBRASIL:
                 try:
-                    logs += f"[{datetime.utcnow().isoformat()}] SEFAZ: Iniciando transmissão real...\n"
-                    cert = Certificado(pfx_data, empresa.certificado_senha)
+                    logs += f"[{datetime.now().isoformat()}] SEFAZ: Iniciando transmissão real...\n"
+                    from cryptography.hazmat.primitives.serialization import pkcs12
+                    from cryptography.hazmat.backends import default_backend
+                    
+                    password_bytes = (empresa.certificado_senha or "").strip().encode('utf-8')
+                    p12 = pkcs12.load_key_and_certificates(pfx_data, password_bytes, default_backend())
+                    
+                    if isinstance(p12, tuple):
+                        p12_key, p12_cert, p12_others = p12
+                    else:
+                        p12_key, p12_cert, p12_others = p12.key, p12.cert, p12.othercerts
+
+                    class CertificadoSimplificado:
+                        def __init__(self, key, cert, othercerts, password_bytes):
+                            self.key = key
+                            self.cert = cert
+                            self.othercerts = othercerts
+                            self._senha = password_bytes
+                            self._chave = key.private_bytes(
+                                encoding=serialization.Encoding.PEM,
+                                format=serialization.PrivateFormat.PKCS8,
+                                encryption_algorithm=serialization.NoEncryption(),
+                            )
+                            self._cert = cert.public_bytes(encoding=serialization.Encoding.PEM)
+                        
+                        def cert_chave(self):
+                            return self._cert.decode(), self._chave.decode()
+                    
+                    cert = CertificadoSimplificado(p12_key, p12_cert, p12_others, password_bytes)
+                    transmissao = TransmissaoSOAP(cert)
+                    
+                    uf_codes = {
+                        'AC': 12, 'AL': 27, 'AP': 16, 'AM': 13, 'BA': 29, 'CE': 23, 'DF': 53, 'ES': 32, 'GO': 52,
+                        'MA': 21, 'MT': 51, 'MS': 50, 'MG': 31, 'PA': 15, 'PB': 25, 'PR': 41, 'PE': 26, 'PI': 22,
+                        'RJ': 33, 'RN': 24, 'RS': 43, 'RO': 11, 'RR': 14, 'SC': 42, 'SP': 35, 'SE': 28, 'TO': 17
+                    }
+                    uf_ibge = uf_codes.get(empresa.uf.upper(), 35)
+
                     edoc = NFe(
-                        transmitir=True, 
-                        certificado=cert, 
-                        estado=empresa.uf, 
+                        transmissao=transmissao,
+                        uf=uf_ibge,
                         ambiente=str(empresa.ambiente), 
-                        versao='4.00'
+                        mod='65'
                     )
                     
-                    # TRANSMISSÃO REAL ATIVADA 🚀
-                    envio = edoc.autorizar(xml_string, indicador_processamento=1)
+                    # TRANSMISSÃO REAL ATIVADA
+                    processo = edoc.processar_documento(nfe_obj, envio_sincrono=True)
+                    envio = next(processo)
                     
                     if envio.resposta:
-                        status_sefaz = str(envio.status)
-                        motivo_sefaz = str(envio.motivo)
-                        chave = str(envio.chave)
-                        protocolo = str(envio.protocolo)
-                        xml_string = str(envio.xml_autorizado)
+                        resp = envio.resposta
+                        if hasattr(resp, 'protNFe') and resp.protNFe:
+                            status_sefaz = str(resp.protNFe.infProt.cStat)
+                            motivo_sefaz = str(resp.protNFe.infProt.xMotivo)
+                            protocolo = str(resp.protNFe.infProt.nProt)
+                        elif hasattr(resp, 'cStat'):
+                            status_sefaz = str(resp.cStat)
+                            motivo_sefaz = str(resp.xMotivo)
                         
-                        logs += f"[{datetime.utcnow().isoformat()}] SEFAZ_RESPOSTA: Status {status_sefaz} - {motivo_sefaz}\n"
-                        logs += f"[{datetime.utcnow().isoformat()}] SEFAZ_PROTOCOLO: {protocolo}\n"
-                        log_sefaz_evento(venda.id, status_sefaz, f"RESPOSTA SEFAZ: {motivo_sefaz}", chave)
+                        try:
+                            output = io.StringIO()
+                            if hasattr(envio, 'xml_autorizado') and envio.xml_autorizado:
+                                envio.xml_autorizado.export(output, 0, name_='nfeProc', namespacedef_='xmlns="http://www.portalfiscal.inf.br/nfe"')
+                            else:
+                                resp.export(output, 0, namespacedef_='xmlns="http://www.portalfiscal.inf.br/nfe"')
+                            xml_string = output.getvalue()
+                        except:
+                            xml_string = envio.retorno.text if hasattr(envio, 'retorno') else "Falha ao exportar XML de resposta"
+                        
+                        logs += f"[{datetime.now().isoformat()}] SEFAZ_RESPOSTA: Status {status_sefaz} - {motivo_sefaz}\n"
+                        logs += f"[{datetime.now().isoformat()}] SEFAZ_PROTOCOLO: {protocolo}\n"
+                        nota.xml_autorizado = xml_string
                     else:
-                        logs += f"[{datetime.utcnow().isoformat()}] SEFAZ_ERRO: Sem resposta síncrona.\n"
-                        log_sefaz_evento(venda.id, "SEM_RESPOSTA", "SEFAZ não retornou resposta síncrona.")
+                        logs += f"[{datetime.now().isoformat()}] SEFAZ_ERRO: Sem resposta síncrona.\n"
                         
                 except Exception as e:
-                    logs += f"[{datetime.utcnow().isoformat()}] ENGINE_ERRO: {str(e)}\n"
-                    log_sefaz_evento(venda.id, "FALHA_ENGINE", f"Erro no motor ERPBrasil: {str(e)}")
+                    logs += f"[{datetime.now().isoformat()}] ENGINE_ERRO: {str(e)}\n"
                     raise Exception(f"Falha na transmissão SEFAZ: {str(e)}")
             else:
-                logs += f"[{datetime.utcnow().isoformat()}] AVISO: ERPBrasil não carregado no Python. Motivo: {ERP_IMPORT_ERROR or 'Desconhecido'}\n"
-                logs += f"[{datetime.utcnow().isoformat()}] Usando fallback (modo simulação).\n"
+                logs += f"[{datetime.now().isoformat()}] AVISO: ERPBrasil não carregado. Motivo: {ERP_IMPORT_ERROR}\n"
+                output = io.StringIO()
+                nfe_obj.export(output, 0, name_='TNFe', namespacedef_='xmlns="http://www.portalfiscal.inf.br/nfe"')
+                xml_string = output.getvalue()
 
-            # Gravação Final no Banco de Dados
             nota.chave_acesso = chave
             nota.numero_nota = venda.id
             nota.serie_nota = 1
@@ -260,16 +394,12 @@ class SefazService:
             db.rollback()
             import traceback
             error_details = traceback.format_exc()
-            
-            # Garante que o erro seja salvo no registro que criamos no início
             try:
                 nota_update = db.query(NotaFiscalModel).filter(NotaFiscalModel.venda_id == venda.id).first()
                 if nota_update:
-                    nota_update.logs_transmissao = (nota_update.logs_transmissao or logs) + f"[{datetime.utcnow().isoformat()}] ERRO_FATAL: {str(e)}\n{error_details}\n"
+                    nota_update.logs_transmissao = (nota_update.logs_transmissao or logs) + f"[{datetime.now().isoformat()}] ERRO_FATAL: {str(e)}\n{error_details}\n"
                     nota_update.status_sefaz = "ERRO"
                     nota_update.motivo_sefaz = str(e)[:250]
                     db.commit()
             except: pass
-            
-            log_sefaz_evento(venda.id, "CRITICAL", f"{str(e)} | {error_details}")
             raise Exception(f"Erro na emissão: {str(e)}")

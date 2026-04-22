@@ -18,6 +18,7 @@ class NotaFiscalResponse(BaseModel):
     motivo_sefaz: Optional[str] = None
     numero_nota: Optional[int] = None
     logs_transmissao: Optional[str] = None
+    xml_autorizado: Optional[str] = None
     
     class Config:
         from_attributes = True
@@ -25,32 +26,31 @@ class NotaFiscalResponse(BaseModel):
 @router.post("/emitir/{venda_id}", response_model=NotaFiscalResponse)
 def emitir_nota(venda_id: int, db: Session = Depends(get_db)):
     """
-    Aciona a geração e transmissão da NFC-e para uma venda fechada.
-    Garante que erros sejam capturados e salvos no banco para auditoria.
+    Aciona a geração e transmissão da NFC-e. 
+    Este endpoint é resiliente: se a SEFAZ falhar, ele retorna a nota com status de erro
+    em vez de lançar uma exceção 400, permitindo que o fluxo da venda continue.
     """
     venda = db.query(Venda).filter(Venda.id == venda_id).first()
     if not venda:
         raise HTTPException(status_code=404, detail="Venda não encontrada")
     
-    if venda.status != StatusVenda.PAGA:
-        raise HTTPException(
-            status_code=400, 
-            detail="A venda deve estar PAGA para emitir a NFC-e"
-        )
-    
     try:
-        # Transmitir via SefazService
+        # Tenta emitir via SefazService
         nota = SefazService.emitir_nfce(db, venda)
         return nota
     except Exception as e:
-        # Busca a nota para retornar o que foi gravado (mesmo com erro)
+        # Em caso de qualquer erro (timeout, certificado, etc), busca o registro da nota 
+        # que o SefazService criou/atualizou com o erro e retorna ela.
+        db.rollback()
         nota_com_erro = db.query(NotaFiscalModel).filter(NotaFiscalModel.venda_id == venda_id).first()
         if nota_com_erro:
             return nota_com_erro
             
-        raise HTTPException(
-            status_code=400, 
-            detail=f"Erro na transmissão SEFAZ: {str(e)}"
+        # Fallback caso nem o registro da nota tenha sido criado
+        return NotaFiscalResponse(
+            venda_id=venda_id,
+            status_sefaz="ERRO",
+            motivo_sefaz=str(e)
         )
 
 @router.get("/todas", response_model=List[NotaFiscalResponse])
@@ -82,13 +82,20 @@ def get_nota_venda(venda_id: int, db: Session = Depends(get_db)):
 
 @router.get("/{venda_id}/xml-log")
 def get_xml_log(venda_id: int, db: Session = Depends(get_db)):
-    """Retorna o conteúdo do XML e os logs salvos no banco de dados."""
-    nota = db.query(NotaFiscalModel).filter(NotaFiscalModel.venda_id == venda_id).first()
-    if not nota:
-        raise HTTPException(status_code=404, detail="Nota fiscal não encontrada para esta venda")
-    
+    # ... código existente ...
     return {
         "xml": nota.xml_autorizado,
         "logs": nota.logs_transmissao
     }
+
+@router.get("/debug/pfx")
+def debug_pfx():
+    """Endpoint temporário para diagnóstico profundo do certificado e inspeção de classes."""
+    import subprocess
+    try:
+        # Roda a inspeção da NFe
+        result = subprocess.run(["python3", "inspect_nfe.py"], capture_output=True, text=True)
+        return {"output": result.stdout, "error": result.stderr}
+    except Exception as e:
+        return {"error": str(e)}
 

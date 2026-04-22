@@ -12,3 +12,7 @@ activate = 1
 
 [legacy_sect]
 activate = 1
+
+# Algumas versões exigem que as seções de algoritmo sejam explicitadas
+[alg_section]
+default_properties = ?provider=legacy
