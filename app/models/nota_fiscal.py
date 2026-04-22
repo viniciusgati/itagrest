@@ -24,13 +24,14 @@ class NotaFiscal(Base):
     # Conteúdo XML (Autorizado)
     xml_autorizado = Column(Text, nullable=True)
     
+    # Auditoria e Logs
+    logs_transmissao = Column(Text, nullable=True)
+    data_emissao = Column(DateTime, default=datetime.utcnow)
+
     # Cancelamento
     protocolo_cancelamento = Column(String(50), nullable=True)
     motivo_cancelamento = Column(String(255), nullable=True)
     data_cancelamento = Column(DateTime, nullable=True)
-
-    # Auditoria
-    data_emissao = Column(DateTime, default=datetime.utcnow)
 
     # Relacionamento
     venda = relationship("app.models.venda.Venda")

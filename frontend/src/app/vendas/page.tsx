@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { ArrowLeft, Search, FileText, Code, CheckCircle2, XCircle, Clock, ExternalLink, Loader2, Printer } from 'lucide-react'
 import api, { getImageUrl } from '@/lib/api'
 import Link from 'next/link'
@@ -9,6 +10,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 
 
 export default function VendasMonitorPage() {
+  const router = useRouter()
   const [vendas, setVendas] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearch] = useState('')
@@ -28,7 +30,7 @@ export default function VendasMonitorPage() {
   }, [])
 
   const handleViewXml = (vendaId: number) => {
-    window.open(getImageUrl(`/api/v1/vendas/${vendaId}/log-xml`), '_blank')
+    window.open(getImageUrl(`/api/v1/notas/${vendaId}/xml-log`), '_blank')
   }
 
   const handlePrint = (vendaId: number) => {
@@ -36,10 +38,7 @@ export default function VendasMonitorPage() {
   }
 
   const handleViewLog = async (vendaId: number) => {
-    try {
-      const res = await api.get(`/vendas/${vendaId}/log-texto`)
-      setLogView(res.data.log)
-    } catch (err) { alert("Log não disponível.") }
+    router.push(`/notas/${vendaId}`)
   }
 
   const filteredVendas = vendas.filter(v => 

@@ -14,18 +14,20 @@ except ImportError:
     HAS_REPORTLAB = False
     print("AVISO: ReportLab não encontrada. Impressão de DANFE desativada.")
 
+# Variável global para capturar erro de importação
+ERP_IMPORT_ERROR = ""
+
 # Módulos modulares do ERPBrasil
 try:
-    from erpbrasil.base.certificado import Certificado
+    from erpbrasil.assinatura.certificado import Certificado
     from erpbrasil.edoc.nfe import NFe 
     HAS_ERPBRASIL = True
 except ImportError as e:
     HAS_ERPBRASIL = False
-    print(f"AVISO: erpbrasil.edoc não carregada corretamente: {str(e)}")
-    # Tenta um log mais profundo se possível
+    ERP_IMPORT_ERROR = str(e)
 except Exception as e:
     HAS_ERPBRASIL = False
-    print(f"ERRO CRÍTICO ao carregar bibliotecas fiscais: {str(e)}")
+    ERP_IMPORT_ERROR = str(e)
 
 from app.models.empresa import Empresa
 from app.models.venda import Venda
@@ -78,10 +80,7 @@ class SefazService:
             
             # ICMS
             icms = etree.SubElement(imposto, "{%s}ICMS" % ns)
-            # Para Simples Nacional usa-se CSOSN, para Regime Normal CST
-            # Aqui simplificamos assumindo CSOSN se começar com 1, 2, 3... 
-            # ou se a empresa for CRT=1 (Simples Nacional)
-            if empresa.inscricao_estadual: # Simplificação: se tem IE e CRT=1
+            if empresa.inscricao_estadual:
                 icms_sn = etree.SubElement(icms, "{%s}ICMSSN102" % ns)
                 etree.SubElement(icms_sn, "{%s}orig" % ns).text = item.origem or "0"
                 etree.SubElement(icms_sn, "{%s}CSOSN" % ns).text = item.cst_icms or "102"
@@ -147,6 +146,12 @@ class SefazService:
         
         nota.chave_acesso, nota.numero_nota, nota.serie_nota, nota.protocolo = chave, venda.id, 1, protocolo
         nota.status_sefaz, nota.motivo_sefaz = status_sefaz, motivo
+        
+        # XML Mockado para auditoria
+        xml_string = SefazService._montar_xml_nfce(empresa, venda, chave)
+        nota.xml_autorizado = xml_string
+        nota.logs_transmissao = f"[{datetime.utcnow().isoformat()}] MOCK_MODE: Emissão simulada com sucesso.\n"
+        
         db.commit(); db.refresh(nota)
         return nota
 
@@ -155,27 +160,54 @@ class SefazService:
         """Fluxo real de Emissão SEFAZ com Trava de Segurança."""
         from app.core.config import settings
         
+        # 1. Garante que o registro da NotaFiscal existe no banco antes de tudo
+        nota = db.query(NotaFiscalModel).filter(NotaFiscalModel.venda_id == venda.id).first()
+        if not nota:
+            nota = NotaFiscalModel(venda_id=venda.id, status_sefaz="PENDENTE", motivo_sefaz="Iniciando emissão")
+            db.add(nota)
+            db.commit()
+            db.refresh(nota)
+            
+        # Inicia logs de transmissão
+        logs = f"[{datetime.utcnow().isoformat()}] INICIO: Processando emissão da Venda {venda.id}\n"
+        
         # TRAVA DE SEGURANÇA MÁXIMA: Nunca transmite se for ambiente de teste
         if settings.ENV == "test":
             log_sefaz_evento(venda.id, "TEST_MODE", "Transmissão bloqueada por ambiente de teste.")
             return SefazService._mock_retorno_sucesso(db, venda, "Ambiente de Teste (Bloqueio de Transmissão)")
 
         empresa = db.query(Empresa).first()
-        if not empresa or not empresa.configurado: raise Exception("Empresa não configurada.")
+        if not empresa or not empresa.configurado: 
+            nota.logs_transmissao = logs + f"[{datetime.utcnow().isoformat()}] ERRO: Empresa não configurada.\n"
+            nota.status_sefaz = "ERRO"
+            nota.motivo_sefaz = "Empresa não configurada"
+            db.commit()
+            raise Exception("Empresa não configurada.")
+        
+        logs += f"[{datetime.utcnow().isoformat()}] EMPRESA: {empresa.razao_social} | CNPJ: {empresa.cnpj}\n"
+        
         try:
-            cert_path = os.path.join("storage/certs", empresa.certificado_path)
-            if not os.path.exists(cert_path): cert_path = empresa.certificado_path
+            # Lógica robusta de localização de certificado
+            cert_path = empresa.certificado_path
+            if not os.path.exists(cert_path):
+                cert_path = os.path.join("storage/certs", os.path.basename(empresa.certificado_path))
+            
+            if not os.path.exists(cert_path):
+                 raise Exception(f"Certificado não encontrado em: {empresa.certificado_path} ou {cert_path}")
+                 
             with open(cert_path, "rb") as f: pfx_data = f.read()
             
-            # Valores Padrão (Fallback Mock se não transmitir)
-            status_sefaz, motivo_sefaz, protocolo = "100", "Autorizado (Simulado)", "135230000000001"
+            # Valores Padrão (Fallback se não transmitir ou HAS_ERPBRASIL=False)
+            status_sefaz, motivo_sefaz, protocolo = "100", "Autorizado (Offline/Fallback)", "135230000000001"
             cnpj_14 = empresa.cnpj.zfill(14)
             data_aa_mm = datetime.utcnow().strftime('%y%m')
             chave = f"35{data_aa_mm}{cnpj_14}65001{venda.id:09}1{venda.id:08}0"[:44]
             xml_string = SefazService._montar_xml_nfce(empresa, venda, chave)
+            logs += f"[{datetime.utcnow().isoformat()}] XML_GERADO: Chave {chave}\n"
 
             if HAS_ERPBRASIL:
                 try:
+                    logs += f"[{datetime.utcnow().isoformat()}] SEFAZ: Iniciando transmissão real...\n"
                     cert = Certificado(pfx_data, empresa.certificado_senha)
                     edoc = NFe(
                         transmitir=True, 
@@ -186,7 +218,6 @@ class SefazService:
                     )
                     
                     # TRANSMISSÃO REAL ATIVADA 🚀
-                    # Envio síncrono para NFC-e (Modelo 65)
                     envio = edoc.autorizar(xml_string, indicador_processamento=1)
                     
                     if envio.resposta:
@@ -196,20 +227,22 @@ class SefazService:
                         protocolo = str(envio.protocolo)
                         xml_string = str(envio.xml_autorizado)
                         
+                        logs += f"[{datetime.utcnow().isoformat()}] SEFAZ_RESPOSTA: Status {status_sefaz} - {motivo_sefaz}\n"
+                        logs += f"[{datetime.utcnow().isoformat()}] SEFAZ_PROTOCOLO: {protocolo}\n"
                         log_sefaz_evento(venda.id, status_sefaz, f"RESPOSTA SEFAZ: {motivo_sefaz}", chave)
                     else:
+                        logs += f"[{datetime.utcnow().isoformat()}] SEFAZ_ERRO: Sem resposta síncrona.\n"
                         log_sefaz_evento(venda.id, "SEM_RESPOSTA", "SEFAZ não retornou resposta síncrona.")
                         
                 except Exception as e:
+                    logs += f"[{datetime.utcnow().isoformat()}] ENGINE_ERRO: {str(e)}\n"
                     log_sefaz_evento(venda.id, "FALHA_ENGINE", f"Erro no motor ERPBrasil: {str(e)}")
                     raise Exception(f"Falha na transmissão SEFAZ: {str(e)}")
+            else:
+                logs += f"[{datetime.utcnow().isoformat()}] AVISO: ERPBrasil não carregado no Python. Motivo: {ERP_IMPORT_ERROR or 'Desconhecido'}\n"
+                logs += f"[{datetime.utcnow().isoformat()}] Usando fallback (modo simulação).\n"
 
-            # Gravação no Banco de Dados
-            nota = db.query(NotaFiscalModel).filter(NotaFiscalModel.venda_id == venda.id).first()
-            if not nota:
-                nota = NotaFiscalModel(venda_id=venda.id)
-                db.add(nota)
-
+            # Gravação Final no Banco de Dados
             nota.chave_acesso = chave
             nota.numero_nota = venda.id
             nota.serie_nota = 1
@@ -217,18 +250,26 @@ class SefazService:
             nota.status_sefaz = status_sefaz
             nota.motivo_sefaz = motivo_sefaz
             nota.xml_autorizado = xml_string
+            nota.logs_transmissao = logs
             
-            # Backup do XML Autorizado/Protocolado
-            xml_backup_dir = "storage/notas_autorizadas"
-            if not os.path.exists(xml_backup_dir): os.makedirs(xml_backup_dir)
-            with open(os.path.join(xml_backup_dir, f"NFCe_{chave}.xml"), "w") as f: f.write(xml_string)
-            log_xml_auditoria(venda.id, xml_string)
-
             db.commit()
             db.refresh(nota)
             return nota
             
         except Exception as e: 
             db.rollback()
-            log_sefaz_evento(venda.id, "CRITICAL", str(e))
+            import traceback
+            error_details = traceback.format_exc()
+            
+            # Garante que o erro seja salvo no registro que criamos no início
+            try:
+                nota_update = db.query(NotaFiscalModel).filter(NotaFiscalModel.venda_id == venda.id).first()
+                if nota_update:
+                    nota_update.logs_transmissao = (nota_update.logs_transmissao or logs) + f"[{datetime.utcnow().isoformat()}] ERRO_FATAL: {str(e)}\n{error_details}\n"
+                    nota_update.status_sefaz = "ERRO"
+                    nota_update.motivo_sefaz = str(e)[:250]
+                    db.commit()
+            except: pass
+            
+            log_sefaz_evento(venda.id, "CRITICAL", f"{str(e)} | {error_details}")
             raise Exception(f"Erro na emissão: {str(e)}")

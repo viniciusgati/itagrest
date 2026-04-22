@@ -10,7 +10,9 @@ python-jose[cryptography]
 alembic
 pydantic[email]
 email-validator
-erpbrasil.edoc[nfelib]
+erpbrasil.assinatura
+erpbrasil.edoc
+nfelib<1.0.0
 python-barcode
 reportlab
 lxml

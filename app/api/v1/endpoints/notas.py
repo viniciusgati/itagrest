@@ -1,12 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+import os
+from fastapi import APIRouter, Depends, HTTPException, status, Response
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 from app.db.session import get_db
 from app.models.venda import Venda, StatusVenda
 from app.models.nota_fiscal import NotaFiscal as NotaFiscalModel
 from app.services.sefaz import SefazService
 from pydantic import BaseModel
-from typing import Optional
 
 router = APIRouter()
 
@@ -17,6 +17,7 @@ class NotaFiscalResponse(BaseModel):
     status_sefaz: Optional[str] = None
     motivo_sefaz: Optional[str] = None
     numero_nota: Optional[int] = None
+    logs_transmissao: Optional[str] = None
     
     class Config:
         from_attributes = True
@@ -25,6 +26,7 @@ class NotaFiscalResponse(BaseModel):
 def emitir_nota(venda_id: int, db: Session = Depends(get_db)):
     """
     Aciona a geração e transmissão da NFC-e para uma venda fechada.
+    Garante que erros sejam capturados e salvos no banco para auditoria.
     """
     venda = db.query(Venda).filter(Venda.id == venda_id).first()
     if not venda:
@@ -41,6 +43,11 @@ def emitir_nota(venda_id: int, db: Session = Depends(get_db)):
         nota = SefazService.emitir_nfce(db, venda)
         return nota
     except Exception as e:
+        # Busca a nota para retornar o que foi gravado (mesmo com erro)
+        nota_com_erro = db.query(NotaFiscalModel).filter(NotaFiscalModel.venda_id == venda_id).first()
+        if nota_com_erro:
+            return nota_com_erro
+            
         raise HTTPException(
             status_code=400, 
             detail=f"Erro na transmissão SEFAZ: {str(e)}"
@@ -66,10 +73,22 @@ def imprimir_danfe(venda_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail=str(e))
 
 @router.get("/status/{venda_id}", response_model=NotaFiscalResponse)
-
 def get_nota_venda(venda_id: int, db: Session = Depends(get_db)):
     """Consulta o status fiscal de uma venda."""
     nota = db.query(NotaFiscalModel).filter(NotaFiscalModel.venda_id == venda_id).first()
     if not nota:
         raise HTTPException(status_code=404, detail="Status fiscal não encontrado para esta venda")
     return nota
+
+@router.get("/{venda_id}/xml-log")
+def get_xml_log(venda_id: int, db: Session = Depends(get_db)):
+    """Retorna o conteúdo do XML e os logs salvos no banco de dados."""
+    nota = db.query(NotaFiscalModel).filter(NotaFiscalModel.venda_id == venda_id).first()
+    if not nota:
+        raise HTTPException(status_code=404, detail="Nota fiscal não encontrada para esta venda")
+    
+    return {
+        "xml": nota.xml_autorizado,
+        "logs": nota.logs_transmissao
+    }
+

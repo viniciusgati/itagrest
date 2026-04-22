@@ -17,6 +17,7 @@ RUN apt-get update && apt-get install -y \
     python3-dev \
     pkg-config \
     git \
+    xmlsec1 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -29,7 +30,7 @@ COPY requirements.txt .
 
 # Instalar dependências principais (Ordem importa para pacotes namespace)
 RUN pip install --no-cache-dir uvicorn[standard] gunicorn reportlab pillow alembic email-validator && \
-    pip install --no-cache-dir erpbrasil.base nfelib erpbrasil.edoc
+    pip install --no-cache-dir "erpbrasil.assinatura" "nfelib<1.0.0" "erpbrasil.edoc"
 
 # Instalar o resto dos requirements
 RUN pip install --no-cache-dir -r requirements.txt

@@ -34,8 +34,10 @@ services:
       - DB_USER=root
       - DB_PASS=root
       - DB_HOST=db
+      - OPENSSL_CONF=/app/openssl_legacy.cnf
     volumes:
       - ./storage:/app/storage:Z
+      - ./openssl_legacy.cnf:/app/openssl_legacy.cnf:ro
     depends_on:
       db:
         condition: service_healthy
