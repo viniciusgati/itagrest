@@ -1,5 +1,30 @@
 [
   {
+    "sessionId": "bc2b9f26-5d86-4837-a0f8-7274a08348a7",
+    "timestamp": "2026-04-23T19:30:01.081Z",
+    "provider": "gemini"
+  },
+  {
+    "sessionId": "bc2b9f26-5d86-4837-a0f8-7274a08348a7",
+    "timestamp": "2026-04-23T19:30:01.047Z",
+    "provider": "gemini"
+  },
+  {
+    "sessionId": "bc2b9f26-5d86-4837-a0f8-7274a08348a7",
+    "timestamp": "2026-04-23T19:30:01.019Z",
+    "provider": "gemini"
+  },
+  {
+    "sessionId": "unknown",
+    "timestamp": "2026-04-23T16:55:38.725Z",
+    "provider": "gemini"
+  },
+  {
+    "sessionId": "unknown",
+    "timestamp": "2026-04-23T16:55:38.694Z",
+    "provider": "gemini"
+  },
+  {
     "sessionId": "unknown",
     "timestamp": "2026-04-22T23:33:24.837Z",
     "provider": "gemini"
@@ -72,31 +97,6 @@
   {
     "sessionId": "unknown",
     "timestamp": "2026-04-20T18:14:53.494Z",
-    "provider": "gemini"
-  },
-  {
-    "sessionId": "unknown",
-    "timestamp": "2026-04-17T20:23:30.773Z",
-    "provider": "gemini"
-  },
-  {
-    "sessionId": "unknown",
-    "timestamp": "2026-04-17T02:30:06.346Z",
-    "provider": "gemini"
-  },
-  {
-    "sessionId": "unknown",
-    "timestamp": "2026-04-17T02:30:06.310Z",
-    "provider": "gemini"
-  },
-  {
-    "sessionId": "unknown",
-    "timestamp": "2026-04-16T16:37:24.149Z",
-    "provider": "gemini"
-  },
-  {
-    "sessionId": "unknown",
-    "timestamp": "2026-04-16T16:37:24.121Z",
     "provider": "gemini"
   }
 ]

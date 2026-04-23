@@ -22,6 +22,9 @@ class SefazService:
     @staticmethod
     def _gerar_xml_limpo(empresa: Empresa, venda: Venda, chave: str, numero_nf: int) -> str:
         from datetime import timezone, timedelta
+        import html
+        def escape(t): return html.escape(str(t or "")).strip()
+
         dh_obj = datetime.now(timezone(timedelta(hours=-3)))
         dh = dh_obj.strftime('%Y-%m-%dT%H:%M:%S-03:00')
         ibge = empresa.municipio_ibge or "3550308"
@@ -35,11 +38,11 @@ class SefazService:
         
         xml = f'<NFe xmlns="http://www.portalfiscal.inf.br/nfe"><infNFe versao="4.00" Id="NFe{chave}">'
         xml += f'<ide><cUF>35</cUF><cNF>{str(numero_nf).zfill(8)}</cNF><natOp>VENDA</natOp><mod>65</mod><serie>1</serie><nNF>{numero_nf}</nNF><dhEmi>{dh}</dhEmi><tpNF>1</tpNF><idDest>1</idDest><cMunFG>{ibge}</cMunFG><tpImp>4</tpImp><tpEmis>1</tpEmis><cDV>{chave[-1]}</cDV><tpAmb>{empresa.ambiente}</tpAmb><finNFe>1</finNFe><indFinal>1</indFinal><indPres>1</indPres><procEmi>0</procEmi><verProc>1.0.0</verProc></ide>'
-        xml += f'<emit><CNPJ>{empresa.cnpj}</CNPJ><xNome>{empresa.razao_social}</xNome><enderEmit><xLgr>{empresa.logradouro or "RUA"}</xLgr><nro>{empresa.numero or "SN"}</nro><xBairro>{empresa.bairro or "BAIRRO"}</xBairro><cMun>{ibge}</cMun><xMun>{empresa.municipio_nome or "CIDADE"}</xMun><UF>{empresa.uf or "SP"}</UF><CEP>{empresa.cep or "01000000"}</CEP><cPais>1058</cPais><xPais>BRASIL</xPais></enderEmit><IE>{empresa.inscricao_estadual}</IE><CRT>1</CRT></emit>'
+        xml += f'<emit><CNPJ>{empresa.cnpj}</CNPJ><xNome>{escape(empresa.razao_social)}</xNome><enderEmit><xLgr>{escape(empresa.logradouro or "RUA")}</xLgr><nro>{escape(empresa.numero or "SN")}</nro><xBairro>{escape(empresa.bairro or "BAIRRO")}</xBairro><cMun>{ibge}</cMun><xMun>{escape(empresa.municipio_nome or "CIDADE")}</xMun><UF>{empresa.uf or "SP"}</UF><CEP>{empresa.cep or "01000000"}</CEP><cPais>1058</cPais><xPais>BRASIL</xPais></enderEmit><IE>{empresa.inscricao_estadual}</IE><CRT>1</CRT></emit>'
         
         if venda.cliente:
             tag = "CNPJ" if len(venda.cliente.documento) > 11 else "CPF"
-            xml += f'<dest><{tag}>{venda.cliente.documento}</{tag}><xNome>{venda.cliente.nome[:60]}</xNome><indIEDest>9</indIEDest></dest>'
+            xml += f'<dest><{tag}>{venda.cliente.documento}</{tag}><xNome>{escape(venda.cliente.nome[:60])}</xNome><indIEDest>9</indIEDest></dest>'
         
         # Recalcula total real dos itens para o XML
         total_xml = 0
@@ -49,18 +52,20 @@ class SefazService:
                 x_prod = "NOTA FISCAL EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL"
             subtotal = float(item.subtotal)
             total_xml += subtotal
-            xml += f'<det nItem="{i+1}"><prod><cProd>{item.id}</cProd><cEAN>SEM GTIN</cEAN><xProd>{x_prod}</xProd><NCM>{item.ncm or "21069029"}</NCM><CFOP>5102</CFOP><uCom>{item.produto.unidade}</uCom><qCom>{item.quantidade:.4f}</qCom><vUnCom>{item.preco_unitario:.4f}</vUnCom><vProd>{subtotal:.2f}</vProd><cEANTrib>SEM GTIN</cEANTrib><uTrib>{item.produto.unidade}</uTrib><qTrib>{item.quantidade:.4f}</qTrib><vUnTrib>{item.preco_unitario:.4f}</vUnTrib><indTot>1</indTot></prod><imposto><ICMS><ICMSSN102><orig>{item.origem or 0}</orig><CSOSN>102</CSOSN></ICMSSN102></ICMS><PIS><PISNT><CST>07</CST></PISNT></PIS><COFINS><COFINSNT><CST>07</CST></COFINSNT></COFINS></imposto></det>'
+            xml += f'<det nItem="{i+1}"><prod><cProd>{item.id}</cProd><cEAN>SEM GTIN</cEAN><xProd>{escape(x_prod)}</xProd><NCM>{item.ncm or "21069029"}</NCM><CFOP>5102</CFOP><uCom>{item.produto.unidade}</uCom><qCom>{item.quantidade:.4f}</qCom><vUnCom>{item.preco_unitario:.4f}</vUnCom><vProd>{subtotal:.2f}</vProd><cEANTrib>SEM GTIN</cEANTrib><uTrib>{item.produto.unidade}</uTrib><qTrib>{item.quantidade:.4f}</qTrib><vUnTrib>{item.preco_unitario:.4f}</vUnTrib><indTot>1</indTot></prod><imposto><ICMS><ICMSSN102><orig>{item.origem or 0}</orig><CSOSN>102</CSOSN></ICMSSN102></ICMS><PIS><PISNT><CST>07</CST></PISNT></PIS><COFINS><COFINSNT><CST>07</CST></COFINSNT></COFINS></imposto></det>'
         
         xml += f'<total><ICMSTot><vBC>0.00</vBC><vICMS>0.00</vICMS><vICMSDeson>0.00</vICMSDeson><vFCP>0.00</vFCP><vBCST>0.00</vBCST><vST>0.00</vST><vFCPST>0.00</vFCPST><vFCPSTRet>0.00</vFCPSTRet><vProd>{total_xml:.2f}</vProd><vFrete>0.00</vFrete><vSeg>0.00</vSeg><vDesc>0.00</vDesc><vII>0.00</vII><vIPI>0.00</vIPI><vIPIDevol>0.00</vIPIDevol><vPIS>0.00</vPIS><vCOFINS>0.00</vCOFINS><vOutro>0.00</vOutro><vNF>{total_xml:.2f}</vNF></ICMSTot></total>'
         xml += '<transp><modFrete>9</modFrete></transp>'
         
-        # INFORMAÇÕES ADICIONAIS (Dados Bancários, Pix, etc)
+        # 4. PAGAMENTO
+        xml += f'<pag><detPag><tPag>01</tPag><vPag>{total_xml:.2f}</vPag></detPag></pag>'
+
+        # 5. INFORMAÇÕES ADICIONAIS (Sanitizado Profissionalmente)
         if empresa.observacoes_nf:
-            # Sanitiza para o XML (remove quebras de linha e caracteres especiais)
-            obs_limpa = empresa.observacoes_nf.replace('\n', ' ').replace('\r', ' ').replace('"', "'").replace('&', '&amp;').strip()
-            xml += f'<infAdic><infCpl>{obs_limpa[:500]}</infCpl></infAdic>'
+            obs_esc = escape(empresa.observacoes_nf.replace('\n', ' ').replace('\r', ' '))
+            xml += f'<infAdic><infCpl>{obs_esc[:500]}</infCpl></infAdic>'
         
-        xml += f'<pag><detPag><tPag>01</tPag><vPag>{total_xml:.2f}</vPag></detPag></pag></infNFe><infNFeSupl><qrCode>{qr}</qrCode><urlChave>{url.replace("qrcode", "consulta")}</urlChave></infNFeSupl></NFe>'
+        xml += f'</infNFe><infNFeSupl><qrCode>{escape(qr)}</qrCode><urlChave>{escape(url.replace("qrcode", "consulta"))}</urlChave></infNFeSupl></NFe>'
         return xml
 
     @staticmethod
