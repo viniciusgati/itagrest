@@ -1,7 +1,7 @@
 FROM python:3.10-slim
 
-# Dependências de sistema para compilar bibliotecas fiscais (M2Crypto, lxml, etc)
-RUN apt-get update && apt-get install -y \
+# Dependências de sistema (Agrupadas e otimizadas)
+RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libpq-dev \
     postgresql-client \
@@ -22,20 +22,19 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-# Setup pip
+# Upgrade ferramentas de build
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel
 
-# Copiar requirements
+# 1. Copiar apenas o arquivo de dependências primeiro (Otimização de Cache)
 COPY requirements.txt .
 
-# Instalar dependências principais (Ordem importa para pacotes namespace)
+# 2. Instalar todas as dependências em uma única camada
+# Incluímos as dependências críticas do ERPBrasil na mesma leva
 RUN pip install --no-cache-dir uvicorn[standard] gunicorn reportlab pillow alembic email-validator && \
-    pip install --no-cache-dir "erpbrasil.assinatura" "nfelib<1.0.0" "erpbrasil.edoc"
+    pip install --no-cache-dir "erpbrasil.assinatura" "nfelib<1.0.0" "erpbrasil.edoc" "erpbrasil.edoc.pdf" && \
+    pip install --no-cache-dir -r requirements.txt
 
-# Instalar o resto dos requirements
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Copiar código
+# 3. Copiar o restante do código (Apenas arquivos permitidos pelo .dockerignore)
 COPY . .
 
 RUN chmod +x entrypoint.sh

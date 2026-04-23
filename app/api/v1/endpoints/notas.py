@@ -18,6 +18,8 @@ class NotaFiscalResponse(BaseModel):
     motivo_sefaz: Optional[str] = None
     numero_nota: Optional[int] = None
     logs_transmissao: Optional[str] = None
+    xml_enviado: Optional[str] = None
+    xml_recebido: Optional[str] = None
     xml_autorizado: Optional[str] = None
     
     class Config:
@@ -59,11 +61,14 @@ def list_notas(db: Session = Depends(get_db)):
     return db.query(NotaFiscalModel).order_by(NotaFiscalModel.data_emissao.desc()).all()
 
 @router.get("/{venda_id}/imprimir")
-def imprimir_danfe(venda_id: int, db: Session = Depends(get_db)):
-    """Gera e retorna o PDF da DANFE para impressão."""
+def imprimir_danfe(venda_id: int, largura: int = 80, db: Session = Depends(get_db)):
+    """
+    Gera e retorna o PDF da DANFE para impressão.
+    largura: 80 para bobinas de 80mm, 58 para bobinas de 58mm.
+    """
     try:
         from fastapi.responses import StreamingResponse
-        pdf_buffer = SefazService.gerar_danfe_pdf(db, venda_id)
+        pdf_buffer = SefazService.gerar_danfe_pdf(db, venda_id, largura)
         return StreamingResponse(
             pdf_buffer, 
             media_type="application/pdf",
@@ -82,9 +87,15 @@ def get_nota_venda(venda_id: int, db: Session = Depends(get_db)):
 
 @router.get("/{venda_id}/xml-log")
 def get_xml_log(venda_id: int, db: Session = Depends(get_db)):
-    # ... código existente ...
+    """Retorna os logs e todos os XMLs (enviado, recebido, autorizado) de uma nota."""
+    nota = db.query(NotaFiscalModel).filter(NotaFiscalModel.venda_id == venda_id).first()
+    if not nota:
+        raise HTTPException(status_code=404, detail="Nota não encontrada para esta venda")
+        
     return {
-        "xml": nota.xml_autorizado,
+        "xml_enviado": nota.xml_enviado,
+        "xml_recebido": nota.xml_recebido,
+        "xml_autorizado": nota.xml_autorizado,
         "logs": nota.logs_transmissao
     }
 

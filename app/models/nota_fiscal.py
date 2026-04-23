@@ -21,7 +21,9 @@ class NotaFiscal(Base):
     status_sefaz = Column(String(10), nullable=True) # 100=Autorizado, etc.
     motivo_sefaz = Column(String(255), nullable=True)
     
-    # Conteúdo XML (Autorizado)
+    # Conteúdo XML
+    xml_enviado = Column(Text, nullable=True)
+    xml_recebido = Column(Text, nullable=True)
     xml_autorizado = Column(Text, nullable=True)
     
     # Auditoria e Logs

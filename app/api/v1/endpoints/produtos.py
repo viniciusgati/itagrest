@@ -60,9 +60,14 @@ def update_produto(produto_id: int, produto_in: ProdutoUpdate, db: Session = Dep
     if not produto:
         raise HTTPException(status_code=404, detail="Produto não encontrado")
     
+    # Pega apenas os campos que o frontend REALMENTE enviou no JSON
     update_data = produto_in.model_dump(exclude_unset=True)
+    
     for field, value in update_data.items():
-        setattr(produto, field, value)
+        # SEGURANÇA EXTRA: Só atualiza se o valor não for None
+        # Isso evita que campos obrigatórios (como NCM) sejam sobrescritos por nulo
+        if value is not None:
+            setattr(produto, field, value)
         
     db.commit()
     db.refresh(produto)

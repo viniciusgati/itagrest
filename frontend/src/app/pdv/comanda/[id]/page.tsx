@@ -19,14 +19,36 @@ export default function ComandaMobilePage() {
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
   const [showCheckout, setShowCheckout] = useState(false)
+  const [checkoutStep, setCheckoutStep] = useState<'summary' | 'payment'>('summary')
   const [showAddItems, setShowAddItems] = useState(false)
   const [isEmitting, setIsEmitting] = useState(false)
   const [fiscalStatus, setFiscalStatus] = useState<any>(null)
   const [error, setError] = useState('')
 
   const [showClienteSearch, setShowClienteSearch] = useState(false)
+  const [showNomeSearch, setShowNomeSearch] = useState(false)
   const [clienteDoc, setClienteDoc] = useState('')
+  const [nomeQuery, setNomeQuery] = useState('')
+  const [sugestoes, setSugestoes] = useState<any[]>([])
   const [clienteEncontrado, setClienteEncontrado] = useState<any>(null)
+  const [isSearchingCliente, setIsSearchingCliente] = useState(false)
+  const [justLinked, setJustLinked] = useState(false)
+
+  // Auto-complete de Clientes por Nome
+  useEffect(() => {
+    const delayDebounceFn = setTimeout(async () => {
+      if (nomeQuery.length >= 2) {
+        try {
+          const res = await api.get(`/clientes/pesquisar/termo?q=${nomeQuery}`)
+          setSugestoes(res.data)
+        } catch (err) { console.error(err) }
+      } else {
+        setSugestoes([])
+      }
+    }, 300)
+
+    return () => clearTimeout(delayDebounceFn)
+  }, [nomeQuery])
   const [addingItem, setAddingItem] = useState<number | null>(null)
   const [justAdded, setJustAdded] = useState<number | null>(null)
 
@@ -84,15 +106,38 @@ export default function ComandaMobilePage() {
     } catch (err) { console.error(err) }
   }
 
-  const handleVincularCliente = async () => {
+  const handleVincularCliente = async (clienteId?: number, clienteObj?: any) => {
+    if (!clienteId && (!clienteDoc || isSearchingCliente)) return
+    setIsSearchingCliente(true)
     try {
-      const res = await api.get(`/clientes/buscar-doc/${clienteDoc}`)
-      await api.put(`/vendas/${venda.id}/fechar`, { cliente_id: res.data.id })
-      setClienteEncontrado(res.data)
-      setShowClienteSearch(false)
-      fetchVenda()
+      let finalCliente = clienteObj
+      
+      if (!clienteId) {
+        // Busca por documento se não foi passado um ID direto (auto-complete)
+        const cleanDoc = clienteDoc.replace(/\D/g, '')
+        const res = await api.get(`/clientes/buscar-doc/${cleanDoc}`)
+        finalCliente = res.data
+      }
+      
+      await api.put(`/vendas/${venda.id}/fechar`, { cliente_id: finalCliente.id })
+      
+      setClienteEncontrado(finalCliente)
+      setJustLinked(true)
+      
+      // Pequeno delay para mostrar o sucesso antes de fechar o modal
+      setTimeout(() => {
+        setJustLinked(false)
+        setShowClienteSearch(false)
+        setShowNomeSearch(false)
+        fetchVenda()
+        setClienteDoc('')
+        setNomeQuery('')
+        setSugestoes([])
+      }, 1500)
     } catch (err) {
       alert("Cliente não encontrado. Cadastre-o primeiro.")
+    } finally {
+      setIsSearchingCliente(false)
     }
   }
 
@@ -152,10 +197,32 @@ export default function ComandaMobilePage() {
           <h1 className="font-black text-slate-900 dark:text-white uppercase tracking-tighter text-xl">Mesa {id}</h1>
           <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">{venda?.status}</p>
         </div>
-        <button onClick={() => setShowClienteSearch(true)} className={`p-3 rounded-xl ${clienteEncontrado ? 'bg-brand-50 text-brand-600' : 'text-slate-300'}`}><User className="w-6 h-6" /></button>
+        <button onClick={() => setShowClienteSearch(true)} className="flex items-center gap-2">
+          {clienteEncontrado && (
+            <div className="text-right hidden sm:block">
+              <p className="text-[9px] font-black text-brand-600 uppercase leading-none">Cliente</p>
+              <p className="text-[11px] font-bold text-slate-900 dark:text-white max-w-[80px] truncate leading-tight">{clienteEncontrado.nome}</p>
+            </div>
+          )}
+          <div className={`p-3 rounded-xl transition-all duration-300 ${clienteEncontrado ? 'bg-brand-50 dark:bg-brand-900/20 text-brand-600' : 'text-slate-300'}`}>
+            <User className="w-6 h-6" />
+          </div>
+        </button>
       </div>
 
       <div className="flex-1 overflow-y-auto p-6 space-y-8 pb-32">
+        {clienteEncontrado && (
+          <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="bg-brand-50 dark:bg-brand-900/10 border border-brand-100 dark:border-brand-900/20 p-4 rounded-3xl flex items-center gap-4">
+            <div className="w-10 h-10 bg-brand-600 text-white rounded-full flex items-center justify-center font-black">
+              {clienteEncontrado.nome.charAt(0)}
+            </div>
+            <div>
+              <p className="text-[10px] font-black text-brand-600 uppercase tracking-widest">Cliente Associado</p>
+              <p className="text-sm font-black text-slate-900 dark:text-white">{clienteEncontrado.nome}</p>
+            </div>
+          </motion.div>
+        )}
+
         {getItensAgrupados().map((item: any) => (
           <motion.div layout key={item.produto_id} className="bg-white dark:bg-slate-800 p-5 rounded-[2rem] flex items-center justify-between shadow-sm border border-slate-50 dark:border-slate-700/50">
             <div className="flex-1">
@@ -175,7 +242,13 @@ export default function ComandaMobilePage() {
 
       <div className="fixed bottom-0 inset-x-0 bg-white dark:bg-slate-800 border-t border-slate-100 dark:border-slate-700 p-6 flex flex-col gap-4 shadow-2xl rounded-t-[3rem] z-30">
         <div className="flex items-center justify-between px-4"><span className="text-slate-400 font-black uppercase text-xs">Total</span><span className="text-3xl font-black text-slate-900 dark:text-white tracking-tighter">R$ {parseFloat(venda?.total || "0").toFixed(2)}</span></div>
-        <button disabled={!venda?.itens?.length} onClick={() => setShowCheckout(true)} className="w-full bg-slate-900 dark:bg-brand-600 text-white font-black py-5 rounded-[1.5rem] shadow-xl flex items-center justify-center gap-3"><Check className="w-5 h-5" /> FECHAR CONTA</button>
+        <button 
+          disabled={!venda?.itens?.length} 
+          onClick={() => { setCheckoutStep('summary'); setShowCheckout(true); }} 
+          className="w-full bg-slate-900 dark:bg-brand-600 text-white font-black py-5 rounded-[1.5rem] shadow-xl flex items-center justify-center gap-3 active:scale-95 transition-transform"
+        >
+          <Check className="w-5 h-5" /> FECHAR CONTA
+        </button>
       </div>
 
       {/* Modais omitidos mas preservados no fluxo Real */}
@@ -235,16 +308,19 @@ export default function ComandaMobilePage() {
       <AnimatePresence>
         {showCheckout && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-slate-900/95 backdrop-blur-2xl p-6 flex flex-col justify-center">
-            <div className="bg-white dark:bg-slate-800 rounded-[3rem] p-10 space-y-8 shadow-2xl relative">
-              <button onClick={() => setShowCheckout(false)} className="absolute top-6 right-6 p-2 text-slate-300"><X /></button>
-              <div className="text-center space-y-2">
-                <h2 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight uppercase">Checkout</h2>
-                <p className="text-slate-400 font-medium">Total R$ {parseFloat(venda?.total || "0").toFixed(2)}</p>
+            <div className="bg-white dark:bg-slate-800 rounded-[3rem] p-8 max-h-[90vh] flex flex-col shadow-2xl relative overflow-hidden">
+              <button onClick={() => setShowCheckout(false)} className="absolute top-6 right-6 p-2 text-slate-300 z-10"><X /></button>
+              
+              <div className="text-center mb-6">
+                <h2 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight uppercase">
+                  {isEmitting ? 'Emitindo Nota' : fiscalStatus ? 'Status Fiscal' : checkoutStep === 'summary' ? 'Resumo da Conta' : 'Pagamento'}
+                </h2>
               </div>
+
               {isEmitting ? (
-                <div className="py-10 text-center space-y-6"><Loader2 className="w-16 h-16 text-brand-600 animate-spin mx-auto" /><p className="font-black dark:text-white uppercase tracking-widest text-xs">Comunicando SEFAZ...</p></div>
+                <div className="py-20 text-center space-y-6"><Loader2 className="w-16 h-16 text-brand-600 animate-spin mx-auto" /><p className="font-black dark:text-white uppercase tracking-widest text-xs">Comunicando SEFAZ...</p></div>
               ) : fiscalStatus ? (
-                <div className="py-10 text-center space-y-6">
+                <div className="py-10 text-center space-y-6 overflow-y-auto">
                   {fiscalStatus.status_sefaz === '100' ? (
                     <>
                       <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-600 mx-auto"><Check className="w-10 h-10" /></div>
@@ -278,10 +354,67 @@ export default function ComandaMobilePage() {
                     </>
                   )}
                 </div>
+              ) : checkoutStep === 'summary' ? (
+                <div className="flex-1 flex flex-col min-h-0">
+                  <div className="flex-1 overflow-y-auto pr-2 space-y-4 mb-6">
+                    {/* Badge do Cliente no Resumo */}
+                    <div className={`p-4 rounded-2xl flex items-center gap-4 border transition-colors ${clienteEncontrado ? 'bg-brand-50/50 border-brand-100 dark:bg-brand-900/10 dark:border-brand-900/20' : 'bg-slate-50 border-slate-100 dark:bg-slate-900/30 dark:border-slate-700'}`}>
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-black ${clienteEncontrado ? 'bg-brand-600' : 'bg-slate-400'}`}>
+                        {clienteEncontrado ? clienteEncontrado.nome.charAt(0) : <User className="w-5 h-5" />}
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Destinatário</p>
+                        <p className="text-sm font-black dark:text-white">{clienteEncontrado ? clienteEncontrado.nome : 'Consumidor Final'}</p>
+                      </div>
+                      {!clienteEncontrado && (
+                        <button 
+                          onClick={() => { setShowCheckout(false); setShowClienteSearch(true); }}
+                          className="text-[10px] font-black text-brand-600 uppercase underline"
+                        >
+                          Identificar
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Lista de Itens no Resumo */}
+                    <div className="space-y-3">
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">Itens da Comanda</p>
+                      {getItensAgrupados().map((item: any) => (
+                        <div key={item.produto_id} className="flex justify-between items-center px-2 py-1 border-b border-slate-50 dark:border-slate-700/50">
+                          <div>
+                            <p className="text-xs font-bold dark:text-white leading-tight">{item.produto.descricao}</p>
+                            <p className="text-[10px] text-slate-400 font-bold uppercase">{item.quantidade}x R$ {parseFloat(item.preco_unitario).toFixed(2)}</p>
+                          </div>
+                          <p className="text-sm font-black dark:text-white">R$ {item.subtotal.toFixed(2)}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="pt-6 border-t border-slate-100 dark:border-slate-700 space-y-4">
+                    <div className="flex items-center justify-between px-2">
+                      <span className="text-slate-400 font-black uppercase text-xs">Total a pagar</span>
+                      <span className="text-3xl font-black text-slate-900 dark:text-white tracking-tighter">R$ {parseFloat(venda?.total || "0").toFixed(2)}</span>
+                    </div>
+                    <button 
+                      onClick={() => setCheckoutStep('payment')}
+                      className="w-full bg-slate-900 dark:bg-brand-600 text-white py-5 rounded-2xl font-black uppercase tracking-widest text-xs shadow-xl active:scale-95 transition-transform"
+                    >
+                      Confirmar e Ir para Pagamento
+                    </button>
+                  </div>
+                </div>
               ) : (
-                <div className="grid grid-cols-1 gap-4">
-                  <button onClick={() => handleFecharMesa('DINHEIRO')} className="h-28 bg-emerald-600 text-white rounded-[2rem] flex items-center justify-center gap-6 font-black uppercase shadow-lg"><DollarSign className="w-8 h-8" /> Dinheiro</button>
-                  <button onClick={() => handleFecharMesa('PIX')} className="h-24 bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-white rounded-[2rem] flex items-center justify-center gap-4 font-black uppercase"><QrCode className="w-6 h-6 text-brand-600" /> PIX</button>
+                <div className="space-y-4 py-4">
+                  <div className="flex items-center justify-between px-4 mb-4">
+                    <span className="text-slate-400 font-black uppercase text-xs">Total</span>
+                    <span className="text-2xl font-black text-slate-900 dark:text-white tracking-tighter">R$ {parseFloat(venda?.total || "0").toFixed(2)}</span>
+                  </div>
+                  <div className="grid grid-cols-1 gap-4">
+                    <button onClick={() => handleFecharMesa('DINHEIRO')} className="h-28 bg-emerald-600 text-white rounded-[2.5rem] flex items-center justify-center gap-6 font-black uppercase shadow-lg active:scale-95 transition-transform"><DollarSign className="w-8 h-8" /> Dinheiro</button>
+                    <button onClick={() => handleFecharMesa('PIX')} className="h-24 bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-white rounded-[2.5rem] flex items-center justify-center gap-4 font-black uppercase active:scale-95 transition-transform"><QrCode className="w-6 h-6 text-brand-600" /> PIX</button>
+                  </div>
+                  <button onClick={() => setCheckoutStep('summary')} className="w-full py-2 text-slate-400 font-bold text-[10px] uppercase tracking-widest">Voltar ao Resumo</button>
                 </div>
               )}
             </div>
@@ -292,11 +425,131 @@ export default function ComandaMobilePage() {
       <AnimatePresence>
         {showClienteSearch && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowClienteSearch(false)} className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" />
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => !isSearchingCliente && setShowClienteSearch(false)} className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" />
             <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="relative bg-white dark:bg-slate-800 w-full max-w-md rounded-[2.5rem] shadow-2xl p-8 space-y-6">
-               <div className="text-center"><UserPlus className="w-12 h-12 text-brand-600 mx-auto mb-2" /><h3 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Identificar Cliente</h3></div>
-               <input type="text" placeholder="CPF ou CNPJ" className="w-full px-6 py-4 bg-slate-50 dark:bg-slate-900 dark:text-white rounded-2xl outline-none font-bold text-center" value={clienteDoc} onChange={e => setClienteDoc(e.target.value)} />
-               <button onClick={handleVincularCliente} className="w-full py-4 bg-slate-900 dark:bg-brand-600 text-white rounded-2xl font-black uppercase tracking-widest text-xs">Vincular</button>
+               <div className="text-center">
+                 <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 transition-colors duration-500 ${justLinked ? 'bg-emerald-500 text-white' : 'bg-brand-50 text-brand-600'}`}>
+                   {justLinked ? <Check className="w-8 h-8" /> : <UserPlus className="w-8 h-8" />}
+                 </div>
+                 <h3 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">
+                   {justLinked ? 'Cliente Vinculado!' : 'Identificar Cliente'}
+                 </h3>
+                 <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mt-1">
+                   {justLinked ? clienteEncontrado?.nome : 'Informe o CPF ou CNPJ'}
+                 </p>
+               </div>
+
+               <div className="relative">
+                 <input 
+                  type="text" 
+                  disabled={isSearchingCliente || justLinked}
+                  placeholder="000.000.000-00" 
+                  className="w-full px-6 py-5 bg-slate-50 dark:bg-slate-900 dark:text-white rounded-2xl outline-none font-black text-center text-lg placeholder:text-slate-300 transition-all focus:ring-4 focus:ring-brand-500/10" 
+                  value={clienteDoc} 
+                  onChange={e => setClienteDoc(e.target.value)} 
+                  onKeyDown={e => e.key === 'Enter' && handleVincularCliente()}
+                 />
+               </div>
+
+               <div className="flex flex-col gap-3">
+                 <button 
+                  disabled={!clienteDoc || isSearchingCliente || justLinked}
+                  onClick={() => handleVincularCliente()} 
+                  className={`w-full py-5 rounded-2xl font-black uppercase tracking-widest text-xs flex items-center justify-center gap-3 transition-all duration-300 shadow-xl ${
+                    justLinked ? 'bg-emerald-500 text-white' : 'bg-slate-900 dark:bg-brand-600 text-white active:scale-95'
+                  }`}
+                 >
+                   {isSearchingCliente ? (
+                     <Loader2 className="w-5 h-5 animate-spin" />
+                   ) : justLinked ? (
+                     <Check className="w-5 h-5" />
+                   ) : (
+                     'Vincular por Documento'
+                   )}
+                 </button>
+                 
+                 {!justLinked && (
+                   <button 
+                    onClick={() => { setShowClienteSearch(false); setShowNomeSearch(true); }}
+                    className="w-full py-4 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-2xl font-black uppercase tracking-widest text-[10px] flex items-center justify-center gap-2"
+                   >
+                     <Search className="w-4 h-4" /> Buscar por Nome
+                   </button>
+                 )}
+               </div>
+               
+               {!isSearchingCliente && !justLinked && (
+                 <button onClick={() => setShowClienteSearch(false)} className="w-full py-2 text-slate-400 font-bold text-[10px] uppercase tracking-widest">Cancelar</button>
+               )}
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* NOVO MODAL: BUSCA POR NOME COM AUTO-COMPLETE */}
+      <AnimatePresence>
+        {showNomeSearch && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => !isSearchingCliente && setShowNomeSearch(false)} className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" />
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="relative bg-white dark:bg-slate-800 w-full max-w-md rounded-[2.5rem] shadow-2xl p-8 space-y-6 flex flex-col max-h-[80vh]">
+               <div className="text-center">
+                 <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 transition-colors duration-500 ${justLinked ? 'bg-emerald-500 text-white' : 'bg-brand-50 text-brand-600'}`}>
+                   {justLinked ? <Check className="w-8 h-8" /> : <Search className="w-8 h-8" />}
+                 </div>
+                 <h3 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">
+                   {justLinked ? 'Cliente Vinculado!' : 'Buscar Cliente'}
+                 </h3>
+               </div>
+
+               <div className="relative">
+                 <input 
+                  type="text" 
+                  autoFocus
+                  disabled={isSearchingCliente || justLinked}
+                  placeholder="Digite o nome..." 
+                  className="w-full px-6 py-5 bg-slate-50 dark:bg-slate-900 dark:text-white rounded-2xl outline-none font-black text-lg placeholder:text-slate-300 transition-all focus:ring-4 focus:ring-brand-500/10" 
+                  value={nomeQuery} 
+                  onChange={e => setNomeQuery(e.target.value)} 
+                 />
+               </div>
+
+               <div className="flex-1 overflow-y-auto space-y-2 min-h-[200px] pr-2 custom-scrollbar">
+                 {sugestoes.length > 0 ? (
+                   sugestoes.map((s: any) => (
+                     <button
+                      key={s.id}
+                      disabled={isSearchingCliente || justLinked}
+                      onClick={() => handleVincularCliente(s.id, s)}
+                      className="w-full p-4 bg-slate-50 dark:bg-slate-900 hover:bg-brand-50 dark:hover:bg-brand-900/20 rounded-2xl text-left transition-colors border border-transparent hover:border-brand-200 group"
+                     >
+                       <p className="font-black text-slate-900 dark:text-white group-hover:text-brand-600 transition-colors">{s.nome}</p>
+                       <p className="text-[10px] text-slate-400 font-bold uppercase">{s.documento}</p>
+                     </button>
+                   ))
+                 ) : nomeQuery.length >= 2 ? (
+                   <div className="h-full flex flex-col items-center justify-center text-slate-400 py-10">
+                     <User className="w-10 h-10 mb-2 opacity-20" />
+                     <p className="font-bold text-xs uppercase tracking-widest">Nenhum cliente encontrado</p>
+                   </div>
+                 ) : (
+                   <div className="h-full flex flex-col items-center justify-center text-slate-400 py-10">
+                     <Search className="w-10 h-10 mb-2 opacity-20" />
+                     <p className="font-bold text-xs uppercase tracking-widest">Digite pelo menos 2 letras</p>
+                   </div>
+                 )}
+               </div>
+
+               {!isSearchingCliente && !justLinked && (
+                 <div className="grid grid-cols-2 gap-3">
+                   <button 
+                    onClick={() => { setShowNomeSearch(false); setShowClienteSearch(true); }}
+                    className="py-4 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-2xl font-black uppercase tracking-widest text-[10px]"
+                   >
+                     CPF/CNPJ
+                   </button>
+                   <button onClick={() => setShowNomeSearch(false)} className="py-4 text-slate-400 font-bold text-[10px] uppercase tracking-widest">Fechar</button>
+                 </div>
+               )}
             </motion.div>
           </div>
         )}

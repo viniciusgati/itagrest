@@ -1,287 +1,292 @@
-import os
-# Força o OpenSSL a carregar o provedor legacy
+import os, io, binascii, re, hashlib, tempfile, requests
+from reportlab.pdfgen import canvas
 os.environ["OPENSSL_CONF"] = "/app/openssl_legacy.cnf"
-
 from lxml import etree
 from sqlalchemy.orm import Session
 from datetime import datetime
-from decimal import Decimal
-import io
-import binascii
-import re
-import hashlib
-
-# Módulos de Impressão (ERPBrasil PDF)
-try:
-    from erpbrasil.edoc.pdf import danfe
-    HAS_DANFE_LIB = True
-except ImportError:
-    HAS_DANFE_LIB = False
-    print("AVISO: erpbrasil.edoc.pdf não encontrada. Usando fallback ReportLab.")
-    try:
-        from reportlab.pdfgen import canvas
-        from reportlab.graphics.barcode import qr
-        HAS_REPORTLAB = True
-    except ImportError:
-        HAS_REPORTLAB = False
-        print("AVISO: ReportLab não encontrada. Impressão de DANFE desativada.")
-
-# Variável global para capturar erro de importação
-ERP_IMPORT_ERROR = ""
-
-def limpar_xml_sefaz(xml_string: str) -> str:
-    """Limpa o XML removendo namespaces redundantes e prefixos editix de forma profunda."""
-    try:
-        # 1. Limpeza de prefixos na base da string
-        xml_string = xml_string.replace('editix:', '').replace('xmlns:editix="http://www.portalfiscal.inf.br/nfe"', '')
-        
-        # 2. Parser lxml para reconstrução
-        parser = etree.XMLParser(remove_blank_text=True)
-        root = etree.fromstring(xml_string.encode('utf-8'), parser)
-        
-        # 3. Remoção recursiva de TODOS os atributos xmlns redundantes
-        for el in root.iter():
-            if el != root:
-                # Remove atributos que começam com {http://www.w3.org/2000/xmlns/}
-                for attr in list(el.attrib):
-                    if 'xmlns' in attr or '{http://www.w3.org/2000/xmlns/}' in attr:
-                        del el.attrib[attr]
-        
-        # 4. Serialização limpa
-        xml_limpo = etree.tostring(root, encoding='unicode', pretty_print=False)
-        
-        # 5. Garantia final de namespace apenas na raiz
-        if 'xmlns=' not in xml_limpo.split('>')[0]:
-            xml_limpo = xml_limpo.replace('<NFe', '<NFe xmlns="http://www.portalfiscal.inf.br/nfe"', 1)
-            xml_limpo = xml_limpo.replace('<enviNFe', '<enviNFe xmlns="http://www.portalfiscal.inf.br/nfe"', 1)
-            
-        return xml_limpo
-    except:
-        # Fallback ultra-agressivo via Regex
-        xml_string = re.sub(r'\sxmlns="http://www.portalfiscal.inf.br/nfe"(?!>)', '', xml_string)
-        return xml_string
-
-# Módulos modulares do ERPBrasil
-try:
-    from erpbrasil.assinatura.certificado import Certificado
-    from erpbrasil.edoc.nfe import NFe 
-    from erpbrasil.edoc.nfce import NFCe
-    from erpbrasil.edoc.edoc import DocumentoEletronico
-    from erpbrasil.transmissao import TransmissaoSOAP
-    from nfelib.v4_00 import leiauteNFe as nfe
-    from cryptography.hazmat.primitives import serialization
-    
-    # MONKEY PATCH GLOBAL NA LIB: Intercepta a geração de XML e limpa ANTES de qualquer uso (assinatura ou envio)
-    def apply_global_edoc_patch():
-        old_method = DocumentoEletronico._generateds_to_string_etree
-        def new_method(self, raiz):
-            # Gera o XML original da lib
-            xml_string, xml_etree = old_method(self, raiz)
-            # Aplica nossa limpeza profunda
-            xml_string = limpar_xml_sefaz(xml_string)
-            # Reconstrói o etree para a lib não se perder
-            xml_etree = etree.fromstring(xml_string.encode('utf-8'))
-            return xml_string, xml_etree
-        DocumentoEletronico._generateds_to_string_etree = new_method
-    
-    apply_global_edoc_patch()
-    HAS_ERPBRASIL = True
-except ImportError as e:
-    HAS_ERPBRASIL = False
-    ERP_IMPORT_ERROR = str(e)
-    print(f"ERRO CRÍTICO: Bibliotecas ERPBrasil não carregadas: {e}")
-
+from cryptography.hazmat.primitives.serialization import pkcs12, Encoding, PrivateFormat, NoEncryption
+from cryptography.hazmat.backends import default_backend
 from app.models.venda import Venda
 from app.models.nota_fiscal import NotaFiscal as NotaFiscalModel
 from app.models.empresa import Empresa
 
-def log_sefaz_evento(venda_id: int, tipo: str, mensagem: str):
-    print(f"[{datetime.now().isoformat()}] [VENDA:{venda_id}] [{tipo}] {mensagem}")
-
 class SefazService:
     @staticmethod
-    def _montar_xml_nfce(empresa: Empresa, venda: Venda, chave_acesso: str):
-        """Gera o objeto da NFC-e (Modelo 65) usando as classes oficiais da nfelib."""
+    def calcular_dv(chave_43):
+        pesos = [2, 3, 4, 5, 6, 7, 8, 9]
+        soma = 0
+        for i, digito in enumerate(reversed(chave_43)):
+            soma += int(digito) * pesos[i % len(pesos)]
+        resto = soma % 11
+        return 0 if resto in [0, 1] else 11 - resto
+
+    @staticmethod
+    def _gerar_xml_limpo(empresa: Empresa, venda: Venda, chave: str, numero_nf: int) -> str:
+        from datetime import timezone, timedelta
+        dh_obj = datetime.now(timezone(timedelta(hours=-3)))
+        dh = dh_obj.strftime('%Y-%m-%dT%H:%M:%S-03:00')
+        ibge = empresa.municipio_ibge or "3550308"
+        url = "https://www.nfce.fazenda.sp.gov.br/qrcode" if empresa.ambiente == 1 else "https://www.homologacao.nfce.fazenda.sp.gov.br/qrcode"
         
-        ibge_cidade = empresa.municipio_ibge if empresa.municipio_ibge else '3550308'
+        # QR Code Rigoroso com ID Token sem zeros à esquerda
+        id_token = str(int(empresa.csc_id or 1))
+        p = f"{chave}|2|{empresa.ambiente}|{id_token}"
+        cHash = hashlib.sha1((p + (empresa.csc_token or "")).encode()).hexdigest().upper()
+        qr = f"{url}?p={p}|{cHash}"
         
-        ide = nfe.ideType(
-            cUF='35', natOp="VENDA", mod='65', serie='1', nNF=str(venda.id),
-            dhEmi=datetime.now().strftime('%Y-%m-%dT%H:%M:%S-03:00'),
-            tpAmb=str(empresa.ambiente), tpImp='4', tpEmis='1', cDV=str(chave_acesso[-1]),
-            cNF=str(venda.id).zfill(8), idDest='1', indFinal='1', indPres='1', procEmi='0', verProc="1.0.0", tpNF='1',
-            cMunFG=ibge_cidade
-        )
-        emit = nfe.emitType(
-            CNPJ=empresa.cnpj, xNome=empresa.razao_social, IE=empresa.inscricao_estadual, CRT='1',
-            enderEmit=nfe.TEnderEmi(
-                xLgr=empresa.logradouro.upper() if empresa.logradouro else "RUA",
-                nro=empresa.numero if empresa.numero else "S/N",
-                xBairro=empresa.bairro.upper() if empresa.bairro else "BAIRRO",
-                cMun=ibge_cidade,
-                xMun=empresa.municipio_nome.upper() if empresa.municipio_nome else "CIDADE",
-                UF=str(empresa.uf).upper(), CEP=empresa.cep if empresa.cep else "01000000",
-                cPais='1058', xPais="BRASIL"
-            )
-        )
-        dest = None
+        xml = f'<NFe xmlns="http://www.portalfiscal.inf.br/nfe"><infNFe versao="4.00" Id="NFe{chave}">'
+        # nNF agora usa o numero_nf passado e não o venda.id
+        xml += f'<ide><cUF>35</cUF><cNF>{str(numero_nf).zfill(8)}</cNF><natOp>VENDA</natOp><mod>65</mod><serie>1</serie><nNF>{numero_nf}</nNF><dhEmi>{dh}</dhEmi><tpNF>1</tpNF><idDest>1</idDest><cMunFG>{ibge}</cMunFG><tpImp>4</tpImp><tpEmis>1</tpEmis><cDV>{chave[-1]}</cDV><tpAmb>{empresa.ambiente}</tpAmb><finNFe>1</finNFe><indFinal>1</indFinal><indPres>1</indPres><procEmi>0</procEmi><verProc>1.0.0</verProc></ide>'
+        xml += f'<emit><CNPJ>{empresa.cnpj}</CNPJ><xNome>{empresa.razao_social}</xNome><enderEmit><xLgr>{empresa.logradouro or "RUA"}</xLgr><nro>{empresa.numero or "SN"}</nro><xBairro>{empresa.bairro or "BAIRRO"}</xBairro><cMun>{ibge}</cMun><xMun>{empresa.municipio_nome or "CIDADE"}</xMun><UF>{empresa.uf or "SP"}</UF><CEP>{empresa.cep or "01000000"}</CEP><cPais>1058</cPais><xPais>BRASIL</xPais></enderEmit><IE>{empresa.inscricao_estadual}</IE><CRT>1</CRT></emit>'
         if venda.cliente:
-            dest = nfe.destType(xNome=venda.cliente.nome, indIEDest='9')
-            if len(venda.cliente.documento) > 11: dest.CNPJ = venda.cliente.documento
-            else: dest.CPF = venda.cliente.documento
-        itens_det = []
+            tag = "CNPJ" if len(venda.cliente.documento) > 11 else "CPF"
+            xml += f'<dest><{tag}>{venda.cliente.documento}</{tag}><xNome>{venda.cliente.nome}</xNome><indIEDest>9</indIEDest></dest>'
+        
         for i, item in enumerate(venda.itens):
-            det = nfe.detType(
-                nItem=str(i+1),
-                prod=nfe.prodType(
-                    cProd=str(item.id), xProd=item.produto.descricao, NCM=item.ncm or "22021000", CFOP="5102",
-                    uCom=item.produto.unidade, qCom=f"{item.quantidade:.4f}", vUnCom=f"{item.preco_unitario:.4f}",
-                    vProd=f"{item.subtotal:.2f}", uTrib=item.produto.unidade, qTrib=f"{item.quantidade:.4f}",
-                    vUnTrib=f"{item.preco_unitario:.4f}", indTot='1'
-                ),
-                imposto=nfe.impostoType(
-                    ICMS=nfe.ICMSType(ICMSSN102=nfe.ICMSSN102Type(orig=str(item.origem or '0'), CSOSN='102')),
-                    PIS=nfe.PISType(PISNT=nfe.PISNTType(CST='07')),
-                    COFINS=nfe.COFINSType(COFINSNT=nfe.COFINSNTType(CST='07'))
-                )
-            )
-            itens_det.append(det)
-        total = nfe.totalType(ICMSTot=nfe.ICMSTotType(vBC="0.00", vICMS="0.00", vICMSDeson="0.00", vFCP="0.00", vBCST="0.00", vST="0.00", vFCPST="0.00", vFCPSTRet="0.00", vProd=f"{venda.total:.2f}", vFrete="0.00", vSeg="0.00", vDesc="0.00", vII="0.00", vIPI="0.00", vIPIDevol="0.00", vPIS="0.00", vCOFINS="0.00", vOutro="0.00", vNF=f"{venda.total:.2f}"))
-        pag = nfe.pagType(detPag=[nfe.detPagType(tPag='01' if venda.forma_pagamento == "DINHEIRO" else '17', vPag=f"{venda.total:.2f}")])
-        inf_nfe_data = nfe.infNFeType(Id=f"NFe{chave_acesso}", versao="4.00", ide=ide, emit=emit, dest=dest, det=itens_det, total=total, pag=pag)
-        nota_obj = nfe.TNFe(infNFe=inf_nfe_data)
-        if empresa.csc_token and empresa.csc_id:
-            url_base = "https://www.nfce.fazenda.sp.gov.br/qrcode?p=" if empresa.ambiente == 1 else "https://www.homologacao.nfce.fazenda.sp.gov.br/qrcode?p="
-            pre_hash = f"{chave_acesso}|2|{empresa.ambiente}|{empresa.csc_id}"
-            full_str = pre_hash + empresa.csc_token
-            cHash = hashlib.sha1(full_str.encode()).hexdigest().upper()
-            nota_obj.infNFeSupl = nfe.infNFeSuplType(qrCode=f"{url_base}{pre_hash}|{cHash}", urlChave=url_base.replace("qrcode", "consulta"))
-        else:
-            nota_obj.infNFeSupl = nfe.infNFeSuplType(qrCode="http://sefaz.sp.gov.br", urlChave="http://sefaz.sp.gov.br")
-        return nota_obj
-
-    @staticmethod
-    def gerar_danfe_pdf(db: Session, venda_id: int) -> io.BytesIO:
-        """Gera o PDF da DANFE usando erpbrasil.edoc.pdf."""
-        venda = db.query(Venda).filter(Venda.id == venda_id).first()
-        nota = db.query(NotaFiscalModel).filter(NotaFiscalModel.venda_id == venda_id).first()
-        if not nota or not nota.xml_autorizado: raise Exception("Nota fiscal não autorizada ou XML não encontrado.")
-        if HAS_DANFE_LIB:
-            try:
-                xml_content = nota.xml_autorizado.encode('utf-8')
-                o_danfe = danfe.Danfe(xml=xml_content, logo='')
-                return io.BytesIO(o_danfe.output())
-            except Exception as e: print(f"Erro ao usar erpbrasil.edoc.pdf: {e}")
-        largura, altura = 145, (250 + (len(venda.itens) * 25)) 
-        buffer = io.BytesIO(); c = canvas.Canvas(buffer, pagesize=(largura, altura)); y = altura - 15; empresa = db.query(Empresa).first()
-        c.setFont("Helvetica-Bold", 8); c.drawCentredString(largura/2, y, empresa.razao_social.upper()[:25]); y -= 10
-        c.setFont("Helvetica", 6); c.drawCentredString(largura/2, y, f"CNPJ: {empresa.cnpj}"); y -= 15
-        c.setFont("Helvetica-Bold", 8); c.drawCentredString(largura/2, y, "DANFE NFC-e"); y -= 12
-        for item in venda.itens:
-            c.setFont("Helvetica", 6); c.drawString(5, y, item.produto.descricao[:22]); c.drawRightString(largura - 5, y, f"{item.subtotal:.2f}"); y -= 10
-        y -= 5; c.line(5, y, largura - 5, y); y -= 12
-        c.setFont("Helvetica-Bold", 9); c.drawString(5, y, "TOTAL"); c.drawRightString(largura - 5, y, f"R$ {venda.total:.2f}"); y -= 15
-        c.setFont("Helvetica", 5); c.drawCentredString(largura/2, y, f"Nota: {nota.numero_nota} Série: {nota.serie_nota}"); y -= 8
-        c.drawCentredString(largura/2, y, nota.chave_acesso[:22]); y -= 6; c.drawCentredString(largura/2, y, nota.chave_acesso[22:])
-        c.showPage(); c.save(); buffer.seek(0); return buffer
-
-    @staticmethod
-    def _mock_retorno_sucesso(db: Session, venda: Venda, motivo: str):
-        """Simula sucesso na emissão para testes automatizados."""
-        from app.models.empresa import Empresa
-        empresa = db.query(Empresa).first()
-        status_sefaz, protocolo = "100", "135230000000001"
-        cnpj_14 = empresa.cnpj.zfill(14); data_aa_mm = datetime.now().strftime('%y%m')
-        chave = f"35{data_aa_mm}{cnpj_14}65001{venda.id:09}1{venda.id:08}0"[:44]
-        nota = db.query(NotaFiscalModel).filter(NotaFiscalModel.venda_id == venda.id).first()
-        if not nota: nota = NotaFiscalModel(venda_id=venda.id); db.add(nota)
-        nota.chave_acesso, nota.numero_nota, nota.serie_nota, nota.protocolo = chave, venda.id, 1, protocolo
-        nota.status_sefaz, nota.motivo_sefaz = status_sefaz, motivo
-        nfe_obj = SefazService._montar_xml_nfce(empresa, venda, chave)
-        output = io.StringIO(); nfe_obj.export(output, 0, name_='NFe', namespacedef_='xmlns="http://www.portalfiscal.inf.br/nfe"')
-        xml_string = limpar_xml_sefaz(output.getvalue())
-        nota.xml_enviado, nota.xml_autorizado = xml_string, xml_string
-        nota.logs_transmissao = f"[{datetime.now().isoformat()}] MOCK_MODE: Sucesso.\n"; db.commit(); db.refresh(nota); return nota
+            x_prod = item.produto.descricao
+            if i == 0 and empresa.ambiente == 2:
+                x_prod = "NOTA FISCAL EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL"
+            xml += f'<det nItem="{i+1}"><prod><cProd>{item.id}</cProd><cEAN>SEM GTIN</cEAN><xProd>{x_prod}</xProd><NCM>{item.ncm or "21069029"}</NCM><CFOP>5102</CFOP><uCom>{item.produto.unidade}</uCom><qCom>{item.quantidade:.4f}</qCom><vUnCom>{item.preco_unitario:.4f}</vUnCom><vProd>{item.subtotal:.2f}</vProd><cEANTrib>SEM GTIN</cEANTrib><uTrib>{item.produto.unidade}</uTrib><qTrib>{item.quantidade:.4f}</qTrib><vUnTrib>{item.preco_unitario:.4f}</vUnTrib><indTot>1</indTot></prod><imposto><ICMS><ICMSSN102><orig>{item.origem or 0}</orig><CSOSN>102</CSOSN></ICMSSN102></ICMS><PIS><PISNT><CST>07</CST></PISNT></PIS><COFINS><COFINSNT><CST>07</CST></COFINSNT></COFINS></imposto></det>'
+        
+        xml += f'<total><ICMSTot><vBC>0.00</vBC><vICMS>0.00</vICMS><vICMSDeson>0.00</vICMSDeson><vFCP>0.00</vFCP><vBCST>0.00</vBCST><vST>0.00</vST><vFCPST>0.00</vFCPST><vFCPSTRet>0.00</vFCPSTRet><vProd>{venda.total:.2f}</vProd><vFrete>0.00</vFrete><vSeg>0.00</vSeg><vDesc>0.00</vDesc><vII>0.00</vII><vIPI>0.00</vIPI><vIPIDevol>0.00</vIPIDevol><vPIS>0.00</vPIS><vCOFINS>0.00</vCOFINS><vOutro>0.00</vOutro><vNF>{venda.total:.2f}</vNF></ICMSTot></total>'
+        xml += '<transp><modFrete>9</modFrete></transp>'
+        xml += f'<pag><detPag><tPag>01</tPag><vPag>{venda.total:.2f}</vPag></detPag></pag></infNFe><infNFeSupl><qrCode>{qr}</qrCode><urlChave>{url.replace("qrcode", "consulta")}</urlChave></infNFeSupl></NFe>'
+        return xml
 
     @staticmethod
     def emitir_nfce(db: Session, venda: Venda):
-        """Fluxo real de Emissão SEFAZ."""
-        from app.core.config import settings
         nota = db.query(NotaFiscalModel).filter(NotaFiscalModel.venda_id == venda.id).first()
-        if not nota:
-            nota = NotaFiscalModel(venda_id=venda.id, status_sefaz="PENDENTE", motivo_sefaz="Iniciando emissão")
-            db.add(nota); db.commit(); db.refresh(nota)
+        if not nota: nota = NotaFiscalModel(venda_id=venda.id, status_sefaz="PENDENTE", motivo_sefaz="Iniciando"); db.add(nota); db.commit(); db.refresh(nota)
         logs = f"[{datetime.now().isoformat()}] INICIO: Emissão Venda {venda.id}\n"
-        if settings.ENV == "test": return SefazService._mock_retorno_sucesso(db, venda, "Ambiente de Teste")
+        
+        # BUSCA EMPRESA E FORÇA REFRESH PARA PEGAR O NÚMERO MAIS ATUAL
         empresa = db.query(Empresa).first()
-        if not empresa or not empresa.configurado: raise Exception("Empresa não configurada.")
+        db.refresh(empresa)
+        
         try:
+            # Pega o próximo número fiscal
+            numero_nf = (empresa.ultimo_numero_nf or 0) + 1
+            print(f">>> [FISCAL] EMITINDO NOTA FISCAL Nº: {numero_nf} (Venda {venda.id})")
+            
             cert_path = empresa.certificado_path
             if not os.path.exists(cert_path): cert_path = os.path.join("storage/certs", os.path.basename(empresa.certificado_path))
             with open(cert_path, "rb") as f: pfx_data = f.read()
-            password_bytes = (empresa.certificado_senha or "").strip().encode('utf-8')
-            status_sefaz, motivo_sefaz, protocolo = None, None, None
-            cnpj_14 = empresa.cnpj.zfill(14); data_aa_mm = datetime.now().strftime('%y%m')
-            chave = f"35{data_aa_mm}{cnpj_14}65001{venda.id:09}1{venda.id:08}0"[:44]
-            nfe_obj = SefazService._montar_xml_nfce(empresa, venda, chave)
-            if HAS_ERPBRASIL:
-                try:
-                    from cryptography.hazmat.primitives.serialization import pkcs12
-                    from cryptography.hazmat.backends import default_backend
-                    p12 = pkcs12.load_key_and_certificates(pfx_data, password_bytes, default_backend())
-                    if isinstance(p12, tuple): p12_key, p12_cert, p12_others = p12
-                    else: p12_key, p12_cert, p12_others = p12.key, p12.cert, p12.othercerts
-                    class CertificadoSimplificado:
-                        def __init__(self, key, cert, othercerts, pw):
-                            self.key, self.cert, self.othercerts, self._senha = key, cert, othercerts, pw
-                            self._chave = key.private_bytes(encoding=serialization.Encoding.PEM, format=serialization.PrivateFormat.PKCS8, encryption_algorithm=serialization.NoEncryption())
-                            self._cert = cert.public_bytes(encoding=serialization.Encoding.PEM)
-                        def cert_chave(self): return self._cert.decode(), self._chave.decode()
-                    cert = CertificadoSimplificado(p12_key, p12_cert, p12_others, password_bytes)
-                    transmissao = TransmissaoSOAP(cert)
-                    uf_ibge = {'AC':12,'AL':27,'AP':16,'AM':13,'BA':29,'CE':23,'DF':53,'ES':32,'GO':52,'MA':21,'MT':51,'MS':50,'MG':31,'PA':15,'PB':25,'PR':41,'PE':26,'PI':22,'RJ':33,'RN':24,'RS':43,'RO':11,'RR':14,'SC':42,'SP':35,'SE':28,'TO':17}.get(empresa.uf.upper(), 35)
-                    edoc = NFCe(transmissao=transmissao, uf=uf_ibge, ambiente=str(empresa.ambiente), mod='65', csc_token=empresa.csc_id, csc_code=empresa.csc_token, envio_sincrono=True)
-                    
-                    logs += f"[{datetime.now().isoformat()}] SEFAZ: Transmitindo...\n"
-                    processo = edoc.processar_documento(nfe_obj, envio_sincrono=True)
-                    envio = next(processo)
-                    
-                    if hasattr(envio, 'retorno'):
-                        nota.xml_recebido = envio.retorno.text
-                        logs += f"[{datetime.now().isoformat()}] SOAP_RESPONSE: {envio.retorno.text[:1000]}\n"
-                    
-                    if envio.resposta:
-                        resp = envio.resposta
-                        if hasattr(resp, 'protNFe') and resp.protNFe:
-                            status_sefaz, motivo_sefaz, protocolo = str(resp.protNFe.infProt.cStat), str(resp.protNFe.infProt.xMotivo), str(resp.protNFe.infProt.nProt)
-                            if hasattr(resp.protNFe.infProt, 'chNFe'): chave = str(resp.protNFe.infProt.chNFe)
-                        elif hasattr(resp, 'cStat'):
-                            status_sefaz, motivo_sefaz = str(resp.cStat), str(resp.xMotivo)
-                        
-                        logs += f"[{datetime.now().isoformat()}] SEFAZ_RESPOSTA: {status_sefaz} - {motivo_sefaz}\n"
-                        if hasattr(envio, 'xml_autorizado') and envio.xml_autorizado:
-                            xml_string = etree.tostring(envio.xml_autorizado, encoding='unicode')
-                            nota.xml_autorizado = limpar_xml_sefaz(xml_string)
-                        else:
-                            out_resp = io.StringIO(); resp.export(out_resp, 0, namespacedef_='xmlns="http://www.portalfiscal.inf.br/nfe"')
-                            nota.xml_autorizado = limpar_xml_sefaz(out_resp.getvalue())
+            pw = (empresa.certificado_senha or "").strip().encode()
+            
+            # Chave base agora usa o numero_nf oficial
+            chave_base = f"35{datetime.now().strftime('%y%m')}{empresa.cnpj.zfill(14)}65001{str(numero_nf).zfill(9)}1{str(numero_nf).zfill(8)}"
+            dv = SefazService.calcular_dv(chave_base); chave = chave_base + str(dv)
+            
+            xml_puro = SefazService._gerar_xml_limpo(empresa, venda, chave, numero_nf)
+            
+            from erpbrasil.assinatura.assinatura import XMLSignerWithSHA1
+            import signxml
+            p12 = pkcs12.load_key_and_certificates(pfx_data, pw, default_backend())
+            pkey, pcert, others = (p12[0], p12[1], p12[2]) if isinstance(p12, tuple) else (p12.key, p12.cert, p12.othercerts)
+            
+            class Cert:
+                def __init__(self, k, c, o, p):
+                    self.key, self.cert, self.othercerts, self._senha = k, c, o, p
+                    self._chave = k.private_bytes(Encoding.PEM, PrivateFormat.TraditionalOpenSSL, NoEncryption())
+                    cpem = c.public_bytes(Encoding.PEM)
+                    for ot in o: cpem += ot.public_bytes(Encoding.PEM)
+                    self._cert = cpem
+                def cert_chave(self): return self._cert.decode(), self._chave.decode()
+            cert_obj = Cert(pkey, pcert, others, pw)
+            
+            root = etree.fromstring(xml_puro.encode('utf-8'))
+            signer = XMLSignerWithSHA1(method=signxml.methods.enveloped, signature_algorithm="rsa-sha1", digest_algorithm="sha1", c14n_algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315")
+            signer.namespaces = {None: signxml.namespaces.ds}
+            signed_root = signer.sign(root, key=pkey, cert=pcert.public_bytes(Encoding.PEM), reference_uri=f"#NFe{chave}")
+            
+            xml_assinado = etree.tostring(signed_root, encoding='unicode')
+            xml_assinado = xml_assinado.replace(' xmlns="http://www.portalfiscal.inf.br/nfe"', '').replace('<NFe', '<NFe xmlns="http://www.portalfiscal.inf.br/nfe"', 1)
+            xml_assinado = re.sub(r'<\?xml.*?\?>', '', xml_assinado).strip()
 
-                    # SALVA XML ENVIADO (Agora garantido limpo pelo patch global)
-                    out_env = io.StringIO(); nfe_obj.export(out_env, 0, name_='NFe', namespacedef_='xmlns="http://www.portalfiscal.inf.br/nfe"')
-                    nota.xml_enviado = out_env.getvalue()
+            url_s = "https://homologacao.nfce.fazenda.sp.gov.br/ws/nfeautorizacao4.asmx" if empresa.ambiente == 2 else "https://nfce.fazenda.sp.gov.br/ws/nfeautorizacao4.asmx"
+            id_lote = str(venda.id).zfill(1)
+            lote_xml = f'<enviNFe xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00"><idLote>{id_lote}</idLote><indSinc>1</indSinc>{xml_assinado}</enviNFe>'
+            env = f'<?xml version="1.0" encoding="utf-8"?><soap12:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap12="http://www.w3.org/2003/05/soap-envelope"><soap12:Body><nfeDadosMsg xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeAutorizacao4">{lote_xml}</nfeDadosMsg></soap12:Body></soap12:Envelope>'
+            
+            ct, kt = tempfile.NamedTemporaryFile(delete=False), tempfile.NamedTemporaryFile(delete=False)
+            try:
+                cert_pem = pcert.public_bytes(Encoding.PEM)
+                for ot in others: cert_pem += ot.public_bytes(Encoding.PEM)
+                ct.write(cert_pem); ct.close(); kt.write(pkey.private_bytes(Encoding.PEM, PrivateFormat.TraditionalOpenSSL, NoEncryption())); kt.close()
+                res = requests.post(url=url_s, data=env.encode('utf-8'), headers={"Content-Type": "application/soap+xml; charset=utf-8"}, cert=(ct.name, kt.name), verify=False, timeout=30)
+                
+                nota.xml_enviado, nota.xml_recebido = xml_assinado, res.text
+                # 5. Processamento do Retorno (Aceita 100-Sucesso, 102-Lote, 204-Duplicidade)
+                xml_res = res.text
+                if any(x in xml_res for x in ["<cStat>100</cStat>", "<cStat>102</cStat>", "<cStat>204</cStat>"]):
+                    nota.status_sefaz, nota.motivo_sefaz = "100", "Autorizado"
+                    
+                    # Busca o protocolo em qualquer lugar da resposta (normal ou erro de duplicidade)
+                    n_prot = re.search(r"<nProt>(.*?)</nProt>", xml_res)
+                    ch_nfe = re.search(r"<chNFe>(.*?)</chNFe>", xml_res)
+                    
+                    if n_prot: nota.protocolo = n_prot.group(1)
+                    if ch_nfe: nota.chave_acesso = ch_nfe.group(1)
+                    nota.numero_nota = numero_nf
+                    
+                    # Incrementa o sequenciador se for uma nota nova
+                    if "<cStat>204</cStat>" not in xml_res:
+                        empresa.ultimo_numero_nf = numero_nf
+                        db.add(empresa)
+                    
+                    # Tenta montar o xml_autorizado completo
+                    pm = re.search(r"<protNFe.*?>(.*?)</protNFe>", xml_res, re.DOTALL)
+                    if pm:
+                        px = pm.group(0)
+                        nota.xml_autorizado = f'<?xml version="1.0" encoding="utf-8"?><nfeProc xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00">{xml_assinado}{px}</nfeProc>'
+                    
+                    venda.status = "PAGA"
+                    db.add(venda)
+                else:
+                    m = re.search(r"<xMotivo>(.*?)</xMotivo>", res.text)
+                    nota.status_sefaz, nota.motivo_sefaz = "ERRO", m.group(1) if m else "Rejeição"
 
-                except Exception as e:
-                    logs += f"[{datetime.now().isoformat()}] ERRO_LIB: {str(e)}\n"
-                    out_err = io.StringIO(); nfe_obj.export(out_err, 0, name_='NFe', namespacedef_='xmlns="http://www.portalfiscal.inf.br/nfe"')
-                    nota.xml_enviado = out_err.getvalue(); raise e
-
-            nota.chave_acesso, nota.numero_nota, nota.protocolo = chave, venda.id, protocolo
-            nota.status_sefaz, nota.motivo_sefaz, nota.logs_transmissao = status_sefaz, motivo_sefaz, logs
-            db.commit(); return nota
-        except Exception as e: 
-            db.rollback()
-            nota_update = db.query(NotaFiscalModel).filter(NotaFiscalModel.venda_id == venda.id).first()
-            if nota_update:
-                nota_update.logs_transmissao = (nota_update.logs_transmissao or "") + logs + f"[{datetime.now().isoformat()}] ERRO_FATAL: {str(e)}\n"
-                nota_update.status_sefaz, nota_update.motivo_sefaz = "ERRO", str(e); db.commit()
+            finally:
+                [os.remove(x) for x in [ct.name, kt.name] if os.path.exists(x)]
+            nota.logs_transmissao = logs; db.commit(); return nota
+        except Exception as e:
+            db.rollback(); nota_u = db.query(NotaFiscalModel).filter(NotaFiscalModel.venda_id == venda.id).first()
+            if nota_u: nota_u.status_sefaz, nota_u.motivo_sefaz, nota_u.logs_transmissao = "ERRO", str(e), logs + str(e); db.commit()
             raise e
+    @staticmethod
+    def gerar_danfe_pdf(db: Session, venda_id: int, largura: int = 80) -> io.BytesIO:
+        nota = db.query(NotaFiscalModel).filter(NotaFiscalModel.venda_id == venda_id).first()
+        venda = db.query(Venda).filter(Venda.id == venda_id).first()
+        empresa = db.query(Empresa).first()
+
+        if not nota or not nota.xml_autorizado:
+            raise Exception("Nota não autorizada ou XML não encontrado.")
+
+        # Conversão de mm para pontos (pt)
+        # 80mm ~ 226pt, 58mm ~ 164pt
+        width_pt = 226 if largura == 80 else 164
+        center_x = width_pt / 2
+        right_margin = width_pt - 10
+
+        try:
+            # Tenta o gerador oficial (Layout completo da NFC-e)
+            from erpbrasil.edoc.pdf import danfe
+            # O gerador oficial geralmente é fixo em A4 ou 80mm, mantemos como está
+            return io.BytesIO(danfe.Danfe(xml=nota.xml_autorizado.encode('utf-8'), logo='').output())
+        except Exception:
+            # Fallback PROFISSIONAL e FLEXÍVEL
+            from reportlab.graphics.barcode.qr import QrCodeWidget
+            from reportlab.graphics.shapes import Drawing
+            from reportlab.graphics import renderPDF
+
+            buffer = io.BytesIO()
+            # Altura dinâmica baseada na qtd de itens (simplificado)
+            height_pt = 450 + (len(venda.itens) * 25)
+            c = canvas.Canvas(buffer, pagesize=(width_pt, height_pt)) 
+            y = height_pt - 20 # Início do topo
+
+            # 1. EMITENTE
+            c.setFont("Helvetica-Bold", 10 if largura == 80 else 9)
+            c.drawCentredString(center_x, y, empresa.razao_social[:35])
+            y -= 12
+            c.setFont("Helvetica", 8)
+            c.drawCentredString(center_x, y, f"CNPJ: {empresa.cnpj}")
+            y -= 10
+            c.drawCentredString(center_x, y, f"{empresa.municipio_nome or 'CIDADE'} - {empresa.uf or 'SP'}")
+            y -= 15
+
+            c.line(10, y, right_margin, y)
+            y -= 15
+
+            # 2. IDENTIFICAÇÃO DANFE
+            c.setFont("Helvetica-Bold", 9 if largura == 80 else 8)
+            c.drawCentredString(center_x, y, "DANFE NFC-e - Documento Auxiliar")
+            y -= 10
+            c.drawCentredString(center_x, y, "da Nota Fiscal de Consumidor Eletrônica")
+            y -= 15
+
+            # 3. ITENS (Layout em duas linhas para maior clareza)
+            c.setFont("Helvetica-Bold", 8)
+            c.drawString(10, y, "CÓD   DESCRIÇÃO")
+            y -= 10
+            c.drawString(10, y, "      QTD x UNIT                         TOTAL")
+            y -= 12
+            
+            c.line(10, y+2, right_margin, y+2)
+            
+            c.setFont("Helvetica", 8)
+            for i, item in enumerate(venda.itens):
+                # Linha 1: Índice e Descrição
+                desc = item.produto.descricao[:25]
+                c.setFont("Helvetica-Bold", 8)
+                c.drawString(10, y, f"{str(i+1).zfill(3)}  {desc}")
+                y -= 10
+                
+                # Linha 2: Detalhes do preço e total
+                c.setFont("Helvetica", 8)
+                detalhe = f"      {item.quantidade:.2f} {item.produto.unidade} x {item.preco_unitario:.2f}"
+                c.drawString(10, y, detalhe)
+                c.drawRightString(right_margin, y, f"{item.subtotal:.2f}")
+                y -= 12
+                
+                if y < 160: break # Limite de segurança
+
+            y -= 5
+            c.line(10, y, right_margin, y)
+            y -= 15
+
+            # 4. TOTAIS E PAGAMENTO
+            c.setFont("Helvetica-Bold", 10)
+            c.drawString(10, y, "VALOR TOTAL R$")
+            c.drawRightString(right_margin, y, f"{venda.total:.2f}")
+            y -= 15
+            c.setFont("Helvetica", 9)
+            forma = venda.forma_pagamento or "DINHEIRO"
+            c.drawString(10, y, f"PAGAMENTO: {forma}")
+            y -= 25
+
+            # 5. AUTORIZAÇÃO
+            c.setFont("Helvetica-Bold", 8 if largura == 80 else 7)
+            c.drawCentredString(center_x, y, "Consulte pela Chave de Acesso em:")
+            y -= 10
+            c.setFont("Helvetica", 7)
+            c.drawCentredString(center_x, y, "www.nfce.fazenda.sp.gov.br/consulta")
+            y -= 12
+
+            # Chave de Acesso
+            chave = nota.chave_acesso
+            if chave:
+                chave_fmt = " ".join([chave[i:i+4] for i in range(0, len(chave), 4)])
+                c.setFont("Helvetica-Bold", 7)
+                # Se 58mm, quebra a chave em duas linhas
+                if largura == 58:
+                    c.drawCentredString(center_x, y, chave_fmt[:27])
+                    y -= 9
+                    c.drawCentredString(center_x, y, chave_fmt[27:])
+                else:
+                    c.drawCentredString(center_x, y, chave_fmt)
+                y -= 15
+
+            c.setFont("Helvetica", 8)
+            c.drawCentredString(center_x, y, f"Protocolo: {nota.protocolo or ''}")
+            y -= 10
+            c.drawCentredString(center_x, y, "Autorizado o uso da NF-e")
+            y -= 10
+            
+            # 6. QR CODE (Centralizado conforme a largura)
+            chave = nota.chave_acesso
+            url_base = "https://www.nfce.fazenda.sp.gov.br/qrcode" if empresa.ambiente == 1 else "https://www.homologacao.nfce.fazenda.sp.gov.br/qrcode"
+            id_token = str(int(empresa.csc_id or 1))
+            p_param = f"{chave}|2|{empresa.ambiente}|{id_token}"
+            cHash = hashlib.sha1((p_param + (empresa.csc_token or "")).encode()).hexdigest().upper()
+            qr_url = f"{url_base}?p={p_param}|{cHash}"
+            
+            qr_code = QrCodeWidget(qr_url)
+            d = Drawing(100, 100)
+            d.add(qr_code)
+            # Desenha o QR Code (centralizado: centro - 50pt)
+            renderPDF.draw(d, c, center_x - 50, y - 110)
+            
+            c.save()
+            buffer.seek(0)
+            return buffer

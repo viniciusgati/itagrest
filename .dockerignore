@@ -1,0 +1,14 @@
+.git
+.gitignore
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.venv_stable/
+frontend/
+node_modules/
+.next/
+*.db
+*.sqlite3
+storage/logs/
+temp_libs/

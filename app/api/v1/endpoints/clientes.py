@@ -41,3 +41,11 @@ def buscar_por_documento(documento: str, db: Session = Depends(get_db)):
     if not cliente:
         raise HTTPException(status_code=404, detail="Cliente não encontrado.")
     return cliente
+
+@router.get("/pesquisar/termo", response_model=List[Cliente])
+def pesquisar_clientes(q: str, db: Session = Depends(get_db)):
+    """Busca clientes por nome ou documento (parcial)."""
+    return db.query(ClienteModel).filter(
+        (ClienteModel.nome.ilike(f"%{q}%")) | 
+        (ClienteModel.documento.ilike(f"%{q}%"))
+    ).limit(10).all()

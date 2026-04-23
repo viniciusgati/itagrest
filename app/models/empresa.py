@@ -33,6 +33,12 @@ class Empresa(Base):
     # Para NFC-e (Cupom Fiscal de Venda de Balcão)
     csc_token = Column(String(100)) # Token do Código de Segurança do Contribuinte
     csc_id = Column(String(10))     # ID do Token (ex: 000001)
+    ultimo_numero_nf = Column(Integer, default=1259) # Sequenciador Fiscal
+    
+    # Dados Bancários para NF-e
+    banco_nome = Column(String(100), nullable=True)
+    agencia = Column(String(20), nullable=True)
+    conta = Column(String(20), nullable=True)
     
     # Recebimentos
     pix_chave = Column(String(100), nullable=True) # Chave PIX para pagamentos
