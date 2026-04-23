@@ -27,6 +27,9 @@ def configurar_empresa(empresa_in: EmpresaCreate, db: Session = Depends(get_db))
     else:
         # Atualiza dados se já existir
         for field, value in empresa_in.model_dump().items():
+            # SEGURANÇA: Não sobrescreve a senha do certificado se vier vazia
+            if field == 'certificado_senha' and not value:
+                continue
             setattr(empresa, field, value)
             
     db.commit()

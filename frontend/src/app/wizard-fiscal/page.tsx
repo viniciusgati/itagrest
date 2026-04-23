@@ -25,6 +25,7 @@ export default function WizardFiscal() {
   const [formData, setFormData] = useState({
     cnpj: '',
     razao_social: '',
+    nome_fantasia: '',
     inscricao_estadual: '',
     logradouro: '',
     numero: '',
@@ -35,6 +36,7 @@ export default function WizardFiscal() {
     ambiente: 2, // Default Homologação
     csc_token: '',
     csc_id: '',
+    observacoes_nf: '',
     certificado_senha: '',
     pix_chave: ''
   })
@@ -97,18 +99,27 @@ export default function WizardFiscal() {
 
       setSuccess(true)
     } catch (err: any) {
-      const detail = err.response?.data?.detail
+      console.error("Erro no Wizard:", err)
+      const response = err.response
       
-      // Se o erro for uma lista de validação do Pydantic, pegamos a primeira mensagem
-      if (Array.isArray(detail)) {
-        setError(detail[0]?.msg || 'Erro de validação nos dados.')
-      } else if (typeof detail === 'object' && detail !== null) {
-        setError(JSON.stringify(detail))
+      if (!response) {
+        setError('Não foi possível conectar ao servidor. Verifique sua conexão ou se o backend está rodando.')
+      } else if (response.status === 500) {
+        setError('Erro interno no servidor (500). Por favor, verifique os logs do sistema.')
+      } else if (response.status === 422) {
+        // Erro de validação do Pydantic
+        const detail = response.data?.detail
+        if (Array.isArray(detail)) {
+          setError(`Erro de validação: ${detail[0]?.msg || 'Dados inválidos'}`)
+        } else {
+          setError(detail || 'Dados inválidos para processamento.')
+        }
       } else {
-        setError(detail || 'Erro ao salvar configuração fiscal.')
+        setError(response.data?.detail || 'Erro inesperado ao salvar configuração.')
       }
       
-      setStep(3) // Volta para o passo do certificado se der erro lá
+      // Se o erro for relacionado ao certificado ou SEFAZ, volta para o passo 3
+      if (step < 3) setStep(3)
     } finally {
       setLoading(false)
     }
@@ -212,6 +223,81 @@ export default function WizardFiscal() {
                     value={formData.razao_social}
                     onChange={e => setFormData({...formData, razao_social: e.target.value})}
                   />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700 ml-1">Nome Fantasia (Comercial)</label>
+                  <input 
+                    type="text" 
+                    placeholder="Nome do seu Restaurante"
+                    className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-brand-100 focus:border-brand-500 outline-none transition-all font-medium"
+                    value={formData.nome_fantasia}
+                    onChange={e => setFormData({...formData, nome_fantasia: e.target.value})}
+                  />
+                </div>
+
+                <div className="pt-6 border-t border-slate-100 space-y-6">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 bg-amber-50 rounded-xl flex items-center justify-center text-amber-600">
+                      <ShieldCheck className="w-4 h-4" />
+                    </div>
+                    <h3 className="text-lg font-bold text-slate-800">Parâmetros Fiscais (NFC-e)</h3>
+                  </div>
+
+                  <div className="grid md:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                      <label className="text-sm font-bold text-slate-700 ml-1">Token CSC</label>
+                      <input 
+                        type="text" 
+                        placeholder="Ex: 00112233..."
+                        className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-brand-100 focus:border-brand-500 outline-none transition-all font-medium"
+                        value={formData.csc_token}
+                        onChange={e => setFormData({...formData, csc_token: e.target.value})}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-bold text-slate-700 ml-1">ID do CSC</label>
+                      <input 
+                        type="text" 
+                        placeholder="Ex: 000001"
+                        className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-brand-100 focus:border-brand-500 outline-none transition-all font-medium"
+                        value={formData.csc_id}
+                        onChange={e => setFormData({...formData, csc_id: e.target.value})}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-bold text-slate-700 ml-1">Observações Gerais (Sai no rodapé da Nota)</label>
+                    <textarea 
+                      placeholder="Ex: Dados bancários para pagamento, frases promocionais, etc."
+                      className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-brand-100 focus:border-brand-500 outline-none transition-all font-medium min-h-[100px]"
+                      value={formData.observacoes_nf}
+                      onChange={e => setFormData({...formData, observacoes_nf: e.target.value})}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-bold text-slate-700 ml-1">Ambiente de Emissão</label>
+                    <div className="flex p-1.5 bg-slate-100 rounded-2xl w-full md:w-1/2">
+                      <button 
+                        onClick={() => setFormData({...formData, ambiente: 2})}
+                        className={`flex-1 py-2.5 rounded-xl font-bold text-sm transition-all ${
+                          formData.ambiente === 2 ? 'bg-white text-brand-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                        }`}
+                      >
+                        Homologação (Testes)
+                      </button>
+                      <button 
+                        onClick={() => setFormData({...formData, ambiente: 1})}
+                        className={`flex-1 py-2.5 rounded-xl font-bold text-sm transition-all ${
+                          formData.ambiente === 1 ? 'bg-white text-orange-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                        }`}
+                      >
+                        Produção (Real)
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
@@ -371,29 +457,6 @@ export default function WizardFiscal() {
                         </button>
                       </div>
                     </div>
-                  </div>
-                </div>
-
-                <div className="pt-4 border-t border-slate-100 grid grid-cols-2 gap-6">
-                  <div className="space-y-2">
-                    <label className="text-sm font-bold text-slate-700 ml-1">Token CSC (SEFAZ)</label>
-                    <input 
-                      type="text" 
-                      placeholder="Ex: 00112233..."
-                      className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-brand-100 focus:border-brand-500 outline-none transition-all font-medium"
-                      value={formData.csc_token}
-                      onChange={e => setFormData({...formData, csc_token: e.target.value})}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-bold text-slate-700 ml-1">ID do CSC</label>
-                    <input 
-                      type="text" 
-                      placeholder="Ex: 000001"
-                      className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-brand-100 focus:border-brand-500 outline-none transition-all font-medium"
-                      value={formData.csc_id}
-                      onChange={e => setFormData({...formData, csc_id: e.target.value})}
-                    />
                   </div>
                 </div>
               </div>

@@ -162,9 +162,8 @@ export default function ComandaMobilePage() {
       }
     } catch (err: any) {
       console.error("Erro no fechamento:", err)
-      // Se a venda fechou mas a nota deu erro, res.data existirá mas resNota não.
-      // O backend agora retorna a nota com erro em vez de 400, então fiscalStatus terá o erro.
-      setError("Mesa fechada, mas houve uma falha na comunicação SEFAZ.")
+      const detail = err.response?.data?.detail
+      setError(detail || "Falha ao fechar mesa. Verifique a conexão.")
     } finally { 
       setIsEmitting(false) 
     }
@@ -397,8 +396,9 @@ export default function ComandaMobilePage() {
                       <span className="text-3xl font-black text-slate-900 dark:text-white tracking-tighter">R$ {parseFloat(venda?.total || "0").toFixed(2)}</span>
                     </div>
                     <button 
+                      disabled={!venda?.itens?.length || parseFloat(venda?.total || "0") <= 0}
                       onClick={() => setCheckoutStep('payment')}
-                      className="w-full bg-slate-900 dark:bg-brand-600 text-white py-5 rounded-2xl font-black uppercase tracking-widest text-xs shadow-xl active:scale-95 transition-transform"
+                      className="w-full bg-slate-900 dark:bg-brand-600 text-white py-5 rounded-2xl font-black uppercase tracking-widest text-xs shadow-xl active:scale-95 transition-transform disabled:opacity-50 disabled:grayscale"
                     >
                       Confirmar e Ir para Pagamento
                     </button>

@@ -4,6 +4,7 @@ from typing import Optional
 class EmpresaBase(BaseModel):
     cnpj: str = Field(..., min_length=14, max_length=14, description="CNPJ do emitente")
     razao_social: str = Field(..., max_length=255, description="Razão Social do emitente")
+    nome_fantasia: Optional[str] = Field(None, max_length=255, description="Nome Fantasia do restaurante")
     inscricao_estadual: str = Field(..., max_length=20, description="Inscrição Estadual do emitente")
     
     # Endereço
@@ -19,6 +20,8 @@ class EmpresaBase(BaseModel):
     ambiente: int = Field(2, description="1: Produção, 2: Homologação")
     csc_token: Optional[str] = None
     csc_id: Optional[str] = None
+    ultimo_numero_nf: Optional[int] = None
+    observacoes_nf: Optional[str] = Field(None, max_length=500, description="Observações gerais da nota")
     pix_chave: Optional[str] = None
 
 class EmpresaCreate(EmpresaBase):

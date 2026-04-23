@@ -140,6 +140,23 @@ def fechar_venda(venda_id: int, update_in: VendaUpdate, db: Session = Depends(ge
     if not venda:
         raise HTTPException(status_code=404, detail="Venda não encontrada")
 
+    # VALIDAÇÃO DE SEGURANÇA: Não permite pagar venda vazia
+    if update_in.status == StatusVenda.PAGA:
+        if not venda.itens or len(venda.itens) == 0:
+            raise HTTPException(
+                status_code=400, 
+                detail="Não é possível fechar uma venda sem produtos cadastrados."
+            )
+        if float(venda.total) <= 0:
+            # Recalcula o total apenas para garantir
+            total_real = sum(item.subtotal for item in venda.itens)
+            if total_real <= 0:
+                raise HTTPException(
+                    status_code=400, 
+                    detail="A venda possui produtos, mas o valor total é zero. Verifique os preços."
+                )
+            venda.total = total_real
+
     if update_in.forma_pagamento:
         venda.forma_pagamento = update_in.forma_pagamento
         # Se escolher PIX e não mandar status, assume AGUARDANDO_PAGAMENTO

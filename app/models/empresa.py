@@ -11,6 +11,7 @@ class Empresa(Base):
     id = Column(Integer, primary_key=True, index=True)
     cnpj = Column(String(14), unique=True, index=True, nullable=False)
     razao_social = Column(String(255), nullable=False)
+    nome_fantasia = Column(String(255), nullable=True) # Nome comercial do restaurante
     inscricao_estadual = Column(String(20), nullable=False)
     
     # Endereço Básico (Exigido pela SEFAZ)
@@ -35,10 +36,8 @@ class Empresa(Base):
     csc_id = Column(String(10))     # ID do Token (ex: 000001)
     ultimo_numero_nf = Column(Integer, default=1259) # Sequenciador Fiscal
     
-    # Dados Bancários para NF-e
-    banco_nome = Column(String(100), nullable=True)
-    agencia = Column(String(20), nullable=True)
-    conta = Column(String(20), nullable=True)
+    # Informações Adicionais para NF-e
+    observacoes_nf = Column(String(500), nullable=True) # Ex: Dados bancários, frases promocionais
     
     # Recebimentos
     pix_chave = Column(String(100), nullable=True) # Chave PIX para pagamentos

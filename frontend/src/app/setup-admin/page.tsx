@@ -55,7 +55,16 @@ export default function SetupAdmin() {
       
       setSuccess(true)
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Erro ao configurar administrador.')
+      console.error("Erro no Setup Admin:", err)
+      const response = err.response
+      
+      if (!response) {
+        setError('Não foi possível conectar ao servidor. Verifique se o backend está rodando.')
+      } else if (response.status === 500) {
+        setError('Erro interno no servidor (500). Tente novamente mais tarde.')
+      } else {
+        setError(response.data?.detail || 'Erro ao configurar administrador.')
+      }
     } finally {
       setLoading(false)
     }
