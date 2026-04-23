@@ -54,7 +54,11 @@ class SefazService:
         xml += f'<total><ICMSTot><vBC>0.00</vBC><vICMS>0.00</vICMS><vICMSDeson>0.00</vICMSDeson><vFCP>0.00</vFCP><vBCST>0.00</vBCST><vST>0.00</vST><vFCPST>0.00</vFCPST><vFCPSTRet>0.00</vFCPSTRet><vProd>{total_xml:.2f}</vProd><vFrete>0.00</vFrete><vSeg>0.00</vSeg><vDesc>0.00</vDesc><vII>0.00</vII><vIPI>0.00</vIPI><vIPIDevol>0.00</vIPIDevol><vPIS>0.00</vPIS><vCOFINS>0.00</vCOFINS><vOutro>0.00</vOutro><vNF>{total_xml:.2f}</vNF></ICMSTot></total>'
         xml += '<transp><modFrete>9</modFrete></transp>'
         
-        # infAdic REMOVIDO DO XML POR SEGURANÇA FISCAL (MANTIDO NA IMPRESSÃO)
+        # INFORMAÇÕES ADICIONAIS (Dados Bancários, Pix, etc)
+        if empresa.observacoes_nf:
+            # Sanitiza para o XML (remove quebras de linha e caracteres especiais)
+            obs_limpa = empresa.observacoes_nf.replace('\n', ' ').replace('\r', ' ').replace('"', "'").replace('&', '&amp;').strip()
+            xml += f'<infAdic><infCpl>{obs_limpa[:500]}</infCpl></infAdic>'
         
         xml += f'<pag><detPag><tPag>01</tPag><vPag>{total_xml:.2f}</vPag></detPag></pag></infNFe><infNFeSupl><qrCode>{qr}</qrCode><urlChave>{url.replace("qrcode", "consulta")}</urlChave></infNFeSupl></NFe>'
         return xml
