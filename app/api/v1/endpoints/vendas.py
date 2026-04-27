@@ -12,6 +12,9 @@ from app.models.produto import Produto as ProdutoModel
 from app.models.cliente import Cliente as ClienteModel
 from app.schemas.venda import Venda as VendaSchema, VendaCreate, VendaUpdate, VendaItemCreate, MesaStatus
 
+from app.models.usuario import Usuario
+from app.api.v1.deps import get_current_gerente
+
 router = APIRouter()
 
 # --- Mapa de Mesas ---
@@ -209,7 +212,11 @@ def cancelar_item(venda_id: int, item_id: int, db: Session = Depends(get_db)):
     return db.query(VendaModel).options(joinedload(VendaModel.itens), joinedload(VendaModel.cliente)).filter(VendaModel.id == venda_id).first()
 
 @router.get("/stats/resumo")
-def get_venda_resumo(dias: int = 7, db: Session = Depends(get_db)):
+def get_venda_resumo(
+    dias: int = 7, 
+    db: Session = Depends(get_db),
+    current_user: Usuario = get_current_gerente
+):
     # Data de início baseada no filtro
     inicio = datetime.utcnow() - timedelta(days=dias)
     vendas = db.query(VendaModel).filter(
@@ -226,7 +233,11 @@ def get_venda_resumo(dias: int = 7, db: Session = Depends(get_db)):
     }
 
 @router.get("/stats/faturamento-periodo")
-def get_faturamento_periodo(dias: int = 7, db: Session = Depends(get_db)):
+def get_faturamento_periodo(
+    dias: int = 7, 
+    db: Session = Depends(get_db),
+    current_user: Usuario = get_current_gerente
+):
     """Retorna o faturamento agrupado por dia ou mês dependendo do período."""
     inicio = datetime.utcnow() - timedelta(days=dias)
     
@@ -253,7 +264,11 @@ def get_faturamento_periodo(dias: int = 7, db: Session = Depends(get_db)):
     return [{"periodo": str(r.periodo), "total": float(r.total)} for r in res]
 
 @router.get("/stats/top-produtos")
-def get_top_produtos(dias: int = 7, db: Session = Depends(get_db)):
+def get_top_produtos(
+    dias: int = 7, 
+    db: Session = Depends(get_db),
+    current_user: Usuario = get_current_gerente
+):
     inicio = datetime.utcnow() - timedelta(days=dias)
     res = db.query(
         ProdutoModel.descricao, 

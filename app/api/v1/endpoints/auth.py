@@ -28,6 +28,9 @@ def login_access_token(
         )
     
     return {
-        "access_token": create_access_token(user.id),
+        "access_token": create_access_token(
+            user.id, 
+            extra_claims={"papel": user.papel}
+        ),
         "token_type": "bearer",
     }
