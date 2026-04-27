@@ -33,5 +33,5 @@ COPY --from=builder /app/public ./public
 # Expor a porta que o Next.js usa
 EXPOSE 3000
 
-# Comando para iniciar o servidor Next.js em produção
-CMD ["npm", "start"]
+# Comando para iniciar o servidor Next.js em produção usando a porta do Railway
+CMD ["sh", "-c", "npm start -- -p ${PORT:-3000}"]
