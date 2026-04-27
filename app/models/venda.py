@@ -55,18 +55,23 @@ class Venda(Base):
 class VendaItem(Base):
     """
     Itens vinculados a uma venda.
-    Copia o preço do produto no momento da venda para histórico.
+    Copia todos os dados do produto no momento da venda para garantir histórico imutável.
     """
     __tablename__ = "venda_itens"
 
     id = Column(Integer, primary_key=True, index=True)
     venda_id = Column(Integer, ForeignKey("vendas.id"), nullable=False)
-    produto_id = Column(Integer, ForeignKey("produtos.id"), nullable=False)
+    # Tornamos produto_id opcional para caso o produto seja deletado do cadastro
+    produto_id = Column(Integer, ForeignKey("produtos.id", ondelete="SET NULL"), nullable=True)
     quantidade = Column(Integer, default=1)
     preco_unitario = Column(Numeric(10, 2), nullable=False)
     subtotal = Column(Numeric(10, 2), nullable=False)
 
-    # --- Campos Fiscais (Snapshot do produto no momento da venda) ---
+    # --- Dados do Snapshot (Cópia fiel do produto no momento do lançamento) ---
+    descricao = Column(String(255), nullable=True)
+    unidade = Column(String(10), default="UN")
+    
+    # --- Campos Fiscais ---
     ncm = Column(String(8), nullable=True)
     cest = Column(String(7), nullable=True)
     cfop = Column(String(4), nullable=True)
@@ -80,4 +85,5 @@ class VendaItem(Base):
 
     # Relacionamentos
     venda = relationship("Venda", back_populates="itens")
+    # Usamos o relacionamento mas precisamos estar cientes de que pode ser None se o produto for deletado
     produto = relationship("Produto", lazy="joined")

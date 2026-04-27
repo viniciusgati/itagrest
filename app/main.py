@@ -14,10 +14,20 @@ app = FastAPI(title="iTagREST - Sistema Fiscal para Restaurantes", version="0.1.
 # Servir arquivos estáticos (Imagens de Produtos)
 app.mount("/static/produtos", StaticFiles(directory="storage/produtos"), name="produtos")
 
-# Configurar CORS para o Frontend Next.js
+# Configuração de CORS Dinâmica e Segura
+allowed_origins = os.getenv("ALLOWED_ORIGINS", "").split(",")
+origins = [
+    "http://localhost:3000",
+    "http://localhost:3001",
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:3001",
+]
+# Adicionar origens da variável de ambiente (se existirem)
+origins.extend([o.strip() for o in allowed_origins if o.strip()])
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:3001"],
+    allow_origins=origins if origins else ["*"], # Fallback para * se nada for definido (evita quebrar)
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

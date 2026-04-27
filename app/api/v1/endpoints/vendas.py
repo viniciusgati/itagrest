@@ -96,7 +96,7 @@ def abrir_venda(venda_in: VendaCreate, db: Session = Depends(get_db)):
 
 @router.post("/{venda_id}/itens", response_model=VendaSchema)
 def adicionar_item(venda_id: int, item_in: VendaItemCreate, db: Session = Depends(get_db)):
-    """Adiciona um produto à comanda."""
+    """Adiciona um produto à comanda com suporte a preço customizado e snapshot completo."""
     venda = db.query(VendaModel).filter(VendaModel.id == venda_id).first()
     if not venda or venda.status != StatusVenda.ABERTA:
         raise HTTPException(status_code=400, detail="Comanda não permite alterações.")
@@ -105,13 +105,19 @@ def adicionar_item(venda_id: int, item_in: VendaItemCreate, db: Session = Depend
     if not produto:
         raise HTTPException(status_code=404, detail="Produto não encontrado.")
     
-    subtotal = Decimal(item_in.quantidade) * produto.preco_venda
+    # Define o preço unitário (prioriza o preço customizado enviado pelo usuário)
+    preco_unitario = Decimal(item_in.preco_customizado) if item_in.preco_customizado is not None else Decimal(produto.preco_venda)
+    subtotal = Decimal(item_in.quantidade) * preco_unitario
+    
     new_item = VendaItemModel(
         venda_id=venda_id,
         produto_id=item_in.produto_id,
         quantidade=item_in.quantidade,
-        preco_unitario=produto.preco_venda,
+        preco_unitario=preco_unitario,
         subtotal=subtotal,
+        # Snapshot completo para garantir histórico se o produto for deletado
+        descricao=produto.descricao,
+        unidade=produto.unidade,
         # Snapshot fiscal
         ncm=produto.ncm,
         cest=produto.cest,

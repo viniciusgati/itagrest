@@ -24,14 +24,16 @@ class VendaItemBase(BaseModel):
     quantidade: int
 
 class VendaItemCreate(VendaItemBase):
-    pass
+    preco_customizado: Optional[Decimal] = None
 
 class VendaItem(VendaItemBase):
     id: int
     venda_id: int
     preco_unitario: Decimal
     subtotal: Decimal
-    produto: Produto
+    descricao: Optional[str] = None
+    unidade: Optional[str] = None
+    produto: Optional[Produto] = None
 
     class Config:
         from_attributes = True

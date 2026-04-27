@@ -1,14 +1,15 @@
 status:
   branch: main
-  modifiedFiles: []
-  modifiedFilesTotalCount: 0
+  modifiedFiles:
+    - app/main.py
+  modifiedFilesTotalCount: 1
   recentCommits:
+    - update next
     - 'release: v1.0.0 - Motor Fiscal Estável e Resiliente'
-    - 'fix(fiscal): re-integrate sanitized infAdic block into XML generation'
   currentEpic: null
   currentStory: null
-  lastUpdate: '2026-04-27T14:20:29.614Z'
+  lastUpdate: '2026-04-27T16:04:45.026Z'
   isGitRepo: true
-timestamp: 1777299629615
+timestamp: 1777305885027
 ttl: 60
-gitFingerprint: 1777051352549.2498:1777051352546.2476
+gitFingerprint: 1777051352549.2498:1777305116783.5737
