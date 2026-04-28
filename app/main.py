@@ -15,15 +15,19 @@ app = FastAPI(title="iTagREST - Sistema Fiscal para Restaurantes", version="0.1.
 app.mount("/static/produtos", StaticFiles(directory="storage/produtos"), name="produtos")
 
 # Configuração de CORS Dinâmica e Segura
-allowed_origins = os.getenv("ALLOWED_ORIGINS", "").split(",")
+allowed_origins_raw = os.getenv("ALLOWED_ORIGINS", "").split(",")
 origins = [
     "http://localhost:3000",
     "http://localhost:3001",
     "http://127.0.0.1:3000",
     "http://127.0.0.1:3001",
 ]
-# Adicionar origens da variável de ambiente (se existirem)
-origins.extend([o.strip() for o in allowed_origins if o.strip()])
+
+# Sanitização e adição de origens da variável de ambiente
+for origin in allowed_origins_raw:
+    clean_origin = origin.strip().strip("\"'").rstrip("/")
+    if clean_origin:
+        origins.append(clean_origin)
 
 app.add_middleware(
     CORSMiddleware,

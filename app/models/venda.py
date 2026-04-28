@@ -11,10 +11,7 @@ class StatusVenda(str, enum.Enum):
     CANCELADA = "CANCELADA"
 
 class FormaPagamento(str, enum.Enum):
-    PIX = "PIX"
     DINHEIRO = "DINHEIRO"
-    CARTAO_CREDITO = "CARTAO_CREDITO"
-    CARTAO_DEBITO = "CARTAO_DEBITO"
 
 class Venda(Base):
     """

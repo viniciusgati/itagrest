@@ -23,7 +23,7 @@ async def importar_xml(file: UploadFile = File(...), db: Session = Depends(get_d
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro no parse do XML: {str(e)}")
 
-@router.get("/", response_model=List[ProdutoSchema])
+@router.get("", response_model=List[ProdutoSchema])
 def list_produtos(
     db: Session = Depends(get_db), 
     categoria: Optional[CategoriaEnum] = None,
@@ -44,7 +44,7 @@ def get_produto(produto_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Produto não encontrado")
     return produto
 
-@router.post("/", response_model=ProdutoSchema, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=ProdutoSchema, status_code=status.HTTP_201_CREATED)
 def create_produto(produto_in: ProdutoCreate, db: Session = Depends(get_db)):
     """Cria um novo produto no cardápio."""
     new_produto = ProdutoModel(**produto_in.model_dump())

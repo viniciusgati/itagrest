@@ -2,7 +2,10 @@ import axios from 'axios';
 
 // A URL da API será lida da variável de ambiente NEXT_PUBLIC_API_URL.
 // Isso permite configurar a URL dinamicamente para desenvolvimento, Docker e produção.
-const baseURL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const envBaseURL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+
+// Remove barra final para evitar barras duplas na concatenação (//api/v1)
+const baseURL = envBaseURL.replace(/\/$/, '');
 
 const api = axios.create({
   baseURL: `${baseURL}/api/v1`,

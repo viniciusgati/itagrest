@@ -168,9 +168,6 @@ def fechar_venda(venda_id: int, update_in: VendaUpdate, db: Session = Depends(ge
 
     if update_in.forma_pagamento:
         venda.forma_pagamento = update_in.forma_pagamento
-        # Se escolher PIX e não mandar status, assume AGUARDANDO_PAGAMENTO
-        if update_in.forma_pagamento == FormaPagamento.PIX and not update_in.status:
-            venda.status = StatusVenda.AGUARDANDO_PAGAMENTO
             
     if update_in.status:
         venda.status = update_in.status
@@ -178,11 +175,6 @@ def fechar_venda(venda_id: int, update_in: VendaUpdate, db: Session = Depends(ge
             venda.data_fechamento = datetime.utcnow()
     if update_in.cliente_id:
         venda.cliente_id = update_in.cliente_id
-
-    # Geração de Payload PIX se necessário
-    if venda.forma_pagamento == FormaPagamento.PIX and venda.status == StatusVenda.AGUARDANDO_PAGAMENTO:
-        venda.pix_payload = f"00020101021226580014BR.GOV.BCB.PIX0136teste@pix.com.br520400005303986540{venda.total:.2f}5802BR5913ITAGREST_TEST6007SAO_PAULO62070503***6304"
-        venda.pix_expiracao = datetime.utcnow() + timedelta(minutes=5)
 
     db.commit()
     

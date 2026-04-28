@@ -12,10 +12,7 @@ class StatusVenda(str, Enum):
     CANCELADA = "CANCELADA"
 
 class FormaPagamento(str, Enum):
-    PIX = "PIX"
     DINHEIRO = "DINHEIRO"
-    CARTAO_CREDITO = "CARTAO_CREDITO"
-    CARTAO_DEBITO = "CARTAO_DEBITO"
 
 # --- Schemas para Itens ---
 
