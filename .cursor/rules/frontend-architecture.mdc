@@ -1,0 +1,37 @@
+# Padrões de Arquitetura Frontend - Módulo Garçom
+
+Este documento define as regras fundamentais para o desenvolvimento do módulo de atendimento móvel (Garçom) no iTagREST.
+
+## 1. Separação de Responsabilidades (SOC)
+
+- **UI (Telas e Componentes):** Localizados em `src/components/garcom/` e `src/app/garcom/`. Devem ser puramente visuais, recebendo dados e funções via props ou hooks.
+- **Estado (Hooks):** Localizados em `src/hooks/`. Toda a lógica de gerenciamento de dados complexos (ex: carrinho, seleção de mesa) deve ser abstraída aqui.
+- **Serviços (API):** Localizados em `src/services/`. Único local autorizado a fazer chamadas `api.get`, `api.post`, etc.
+
+## 2. Componentização e Reutilização
+
+- Componentes devem ser pequenos e focados em uma única responsabilidade.
+- Use **Tailwind CSS** para estilização e **Framer Motion** para animações de feedback.
+- Touch targets em dispositivos móveis devem ter no mínimo **44x44px**.
+
+## 3. Organização de Pastas
+
+```text
+src/
+  ├── app/garcom/        # Rotas (Páginas)
+  ├── components/garcom/ # Componentes de UI específicos
+  ├── hooks/             # Lógica de Estado e Dados
+  └── services/          # Integração com Backend
+```
+
+## 4. Mobile-First e Experiência do Usuário
+
+- Design pensado primeiro para celular (estratégia mobile-first).
+- Uso de **Web Share API** (`navigator.share`) para compartilhamento de PDFs fiscais.
+- Feedback tátil e visual para cada ação do garçom (carregamentos, sucessos, erros).
+
+## 5. Manutenção e Evolução
+
+- Toda nova feature do garçom deve seguir este padrão.
+- Evite lógica de negócio pesada dentro do JSX das páginas.
+- Persistência de dados sensíveis deve ser feita respeitando as permissões de `GERENTE` vs `GARCOM`.
