@@ -7,11 +7,11 @@ from app.schemas.cliente import Cliente, ClienteCreate, ClienteUpdate
 
 router = APIRouter()
 
-@router.get("/", response_model=List[Cliente])
+@router.get("", response_model=List[Cliente])
 def listar_clientes(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     return db.query(ClienteModel).offset(skip).limit(limit).all()
 
-@router.post("/", response_model=Cliente, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=Cliente, status_code=status.HTTP_201_CREATED)
 def criar_cliente(cliente_in: ClienteCreate, db: Session = Depends(get_db)):
     # Limpar máscara do documento
     doc_limpo = "".join(filter(str.isdigit, cliente_in.documento))

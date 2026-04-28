@@ -56,7 +56,7 @@ def get_vendas_lista(db: Session = Depends(get_db)):
 
 # --- Gerenciamento de Vendas ---
 
-@router.post("/", response_model=VendaSchema)
+@router.post("", response_model=VendaSchema)
 def abrir_venda(venda_in: VendaCreate, db: Session = Depends(get_db)):
     """Abre uma nova mesa ou recupera a venda atual. Garante unicidade de venda ativa por mesa."""
     # 1. Tenta encontrar a venda existente
