@@ -1,11 +1,20 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { Plus, Search, User, Edit2, Trash2, X, Loader2, Mail, Phone, FileText } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { Plus, Search, User, Edit2, X, Loader2, Mail, Phone, Upload } from 'lucide-react'
 import api from '@/lib/api'
-import { motion } from 'framer-motion'
 
-
+const emptyForm = {
+  nome: '',
+  documento: '',
+  email: '',
+  telefone: '',
+  logradouro: '',
+  numero: '',
+  bairro: '',
+  municipio_nome: '',
+  uf: '',
+}
 
 export default function ClientesPage() {
   const [clientes, setClientes] = useState<any[]>([])
@@ -13,6 +22,9 @@ export default function ClientesPage() {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingCliente, setEditingCliente] = useState<any>(null)
   const [busca, setBusca] = useState('')
+  const [form, setForm] = useState(emptyForm)
+  const [importing, setImporting] = useState(false)
+  const fileRef = useRef<HTMLInputElement>(null)
 
   const fetchClientes = async () => {
     setLoading(true)
@@ -29,29 +41,70 @@ export default function ClientesPage() {
 
   const openModal = (cliente: any = null) => {
     setEditingCliente(cliente)
+    if (cliente) {
+      setForm({
+        nome: cliente.nome || '',
+        documento: cliente.documento || '',
+        email: cliente.email || '',
+        telefone: cliente.telefone || '',
+        logradouro: cliente.logradouro || '',
+        numero: cliente.numero || '',
+        bairro: cliente.bairro || '',
+        municipio_nome: cliente.municipio_nome || '',
+        uf: cliente.uf || '',
+      })
+    } else {
+      setForm(emptyForm)
+    }
     setIsModalOpen(true)
   }
 
   const closeModal = () => {
     setEditingCliente(null)
+    setForm(emptyForm)
     setIsModalOpen(false)
   }
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
-    const formData = new FormData(e.currentTarget)
-    const data = Object.fromEntries(formData.entries())
-
     try {
       if (editingCliente) {
-        await api.put(`/clientes/${editingCliente.id}`, data)
+        await api.put(`/clientes/${editingCliente.id}`, form)
       } else {
-        await api.post('/clientes', data)
+        await api.post('/clientes', form)
       }
       fetchClientes()
       closeModal()
     } catch (err: any) { 
       alert(err.response?.data?.detail || "Erro ao salvar cliente")
+    }
+  }
+
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setImporting(true)
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      const res = await api.post('/clientes/extrair-cnpj-pdf', fd)
+      const d = res.data
+      setForm({
+        nome: d.razao_social || '',
+        documento: d.cnpj || '',
+        email: d.email || '',
+        telefone: d.telefone || '',
+        logradouro: d.logradouro || '',
+        numero: d.numero || '',
+        bairro: d.bairro || '',
+        municipio_nome: d.municipio || '',
+        uf: d.uf || '',
+      })
+    } catch (err: any) {
+      alert(err.response?.data?.detail || "Erro ao importar Cartão CNPJ")
+    } finally {
+      setImporting(false)
+      if (fileRef.current) fileRef.current.value = ''
     }
   }
 
@@ -135,25 +188,56 @@ export default function ClientesPage() {
             </div>
             
             <form onSubmit={handleSubmit} className="p-8 space-y-6 overflow-y-auto">
+              {/* Botão Importar Cartão CNPJ */}
+              {!editingCliente && (
+                <div className="flex items-center gap-4 pb-4 border-b border-slate-100 dark:border-slate-700">
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    accept=".pdf"
+                    className="hidden"
+                    onChange={handleImport}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => fileRef.current?.click()}
+                    disabled={importing}
+                    className="flex items-center gap-2 px-5 py-3 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 rounded-2xl text-xs font-black uppercase tracking-widest transition-all disabled:opacity-50"
+                  >
+                    {importing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                    Importar Cartão CNPJ
+                  </button>
+                  {form.nome && !editingCliente && (
+                    <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                      ✓ Dados importados
+                    </span>
+                  )}
+                </div>
+              )}
+
               <div className="grid md:grid-cols-2 gap-6">
                 <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Nome / Razão Social</label>
-                  <input name="nome" defaultValue={editingCliente?.nome} required className="w-full px-6 py-4 bg-slate-50 dark:bg-slate-900 border-none rounded-2xl focus:ring-2 focus:ring-brand-500 font-bold" />
+                  <input required className="w-full px-6 py-4 bg-slate-50 dark:bg-slate-900 border-none rounded-2xl focus:ring-2 focus:ring-brand-500 font-bold text-slate-900 dark:text-white"
+                    value={form.nome} onChange={e => setForm({...form, nome: e.target.value})} />
                 </div>
                 <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">CPF / CNPJ (Apenas números)</label>
-                  <input name="documento" defaultValue={editingCliente?.documento} required className="w-full px-6 py-4 bg-slate-50 dark:bg-slate-900 border-none rounded-2xl focus:ring-2 focus:ring-brand-500 font-bold" />
+                  <input required className="w-full px-6 py-4 bg-slate-50 dark:bg-slate-900 border-none rounded-2xl focus:ring-2 focus:ring-brand-500 font-bold text-slate-900 dark:text-white"
+                    value={form.documento} onChange={e => setForm({...form, documento: e.target.value})} />
                 </div>
               </div>
 
               <div className="grid md:grid-cols-2 gap-6">
                 <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">E-mail</label>
-                  <input name="email" type="email" defaultValue={editingCliente?.email} className="w-full px-6 py-4 bg-slate-50 dark:bg-slate-900 border-none rounded-2xl focus:ring-2 focus:ring-brand-500 font-bold" />
+                  <input type="email" className="w-full px-6 py-4 bg-slate-50 dark:bg-slate-900 border-none rounded-2xl focus:ring-2 focus:ring-brand-500 font-bold text-slate-900 dark:text-white"
+                    value={form.email} onChange={e => setForm({...form, email: e.target.value})} />
                 </div>
                 <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Telefone</label>
-                  <input name="telefone" defaultValue={editingCliente?.telefone} className="w-full px-6 py-4 bg-slate-50 dark:bg-slate-900 border-none rounded-2xl focus:ring-2 focus:ring-brand-500 font-bold" />
+                  <input className="w-full px-6 py-4 bg-slate-50 dark:bg-slate-900 border-none rounded-2xl focus:ring-2 focus:ring-brand-500 font-bold text-slate-900 dark:text-white"
+                    value={form.telefone} onChange={e => setForm({...form, telefone: e.target.value})} />
                 </div>
               </div>
 
@@ -161,21 +245,26 @@ export default function ClientesPage() {
                 <h4 className="text-xs font-black uppercase text-slate-400 tracking-widest">Endereço (Opcional)</h4>
                 <div className="grid grid-cols-4 gap-4">
                   <div className="col-span-3 space-y-1">
-                    <input name="logradouro" placeholder="Logradouro" defaultValue={editingCliente?.logradouro} className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-900 rounded-xl" />
+                    <input placeholder="Logradouro" className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-900 rounded-xl text-slate-900 dark:text-white"
+                      value={form.logradouro} onChange={e => setForm({...form, logradouro: e.target.value})} />
                   </div>
                   <div className="space-y-1">
-                    <input name="numero" placeholder="Nº" defaultValue={editingCliente?.numero} className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-900 rounded-xl" />
+                    <input placeholder="Nº" className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-900 rounded-xl text-slate-900 dark:text-white"
+                      value={form.numero} onChange={e => setForm({...form, numero: e.target.value})} />
                   </div>
                 </div>
                 <div className="grid grid-cols-3 gap-4">
                   <div className="space-y-1">
-                    <input name="bairro" placeholder="Bairro" defaultValue={editingCliente?.bairro} className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-900 rounded-xl" />
+                    <input placeholder="Bairro" className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-900 rounded-xl text-slate-900 dark:text-white"
+                      value={form.bairro} onChange={e => setForm({...form, bairro: e.target.value})} />
                   </div>
                   <div className="space-y-1">
-                    <input name="municipio_nome" placeholder="Cidade" defaultValue={editingCliente?.municipio_nome} className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-900 rounded-xl" />
+                    <input placeholder="Cidade" className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-900 rounded-xl text-slate-900 dark:text-white"
+                      value={form.municipio_nome} onChange={e => setForm({...form, municipio_nome: e.target.value})} />
                   </div>
                   <div className="space-y-1">
-                    <input name="uf" placeholder="UF" maxLength={2} defaultValue={editingCliente?.uf} className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-900 rounded-xl uppercase" />
+                    <input placeholder="UF" maxLength={2} className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-900 rounded-xl uppercase text-slate-900 dark:text-white"
+                      value={form.uf} onChange={e => setForm({...form, uf: e.target.value.toUpperCase()})} />
                   </div>
                 </div>
               </div>
