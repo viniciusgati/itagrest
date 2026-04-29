@@ -4,7 +4,7 @@ from typing import List
 from app.db.session import get_db
 from app.models.cliente import Cliente as ClienteModel
 from app.schemas.cliente import Cliente, ClienteCreate, ClienteUpdate
-from app.api.v1.deps import get_current_user
+from app.api.v1.deps import get_current_user, get_current_gerente
 from app.models.usuario import Usuario
 from app.services.parser_cnpj import extrair_cnpj_do_pdf
 
@@ -59,6 +59,42 @@ def criar_cliente(
     db.commit()
     db.refresh(new_cliente)
     return new_cliente
+
+@router.put("/{cliente_id}", response_model=Cliente)
+def atualizar_cliente(
+    cliente_id: int,
+    cliente_in: ClienteUpdate,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user)
+):
+    cliente = db.query(ClienteModel).filter(ClienteModel.id == cliente_id).first()
+    if not cliente:
+        raise HTTPException(status_code=404, detail="Cliente não encontrado.")
+    
+    update_data = cliente_in.model_dump(exclude_unset=True)
+    if "documento" in update_data:
+        update_data["documento"] = "".join(filter(str.isdigit, update_data["documento"]))
+    
+    for field, value in update_data.items():
+        if value is not None:
+            setattr(cliente, field, value)
+    
+    db.commit()
+    db.refresh(cliente)
+    return cliente
+
+@router.delete("/{cliente_id}", status_code=status.HTTP_204_NO_CONTENT)
+def deletar_cliente(
+    cliente_id: int,
+    db: Session = Depends(get_db),
+    current_user: Usuario = get_current_gerente
+):
+    cliente = db.query(ClienteModel).filter(ClienteModel.id == cliente_id).first()
+    if not cliente:
+        raise HTTPException(status_code=404, detail="Cliente não encontrado.")
+    db.delete(cliente)
+    db.commit()
+    return None
 
 @router.get("/{cliente_id}", response_model=Cliente)
 def buscar_cliente(
