@@ -167,8 +167,6 @@ export default function Sidebar() {
         </div>
       </aside>
 
-      {/* Spacer for desktop layout */}
-      <div className="hidden md:block w-72 shrink-0" />
     </>
   )
 }
