@@ -1,6 +1,9 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from app.core.limiter import limiter
 from app.api.v1.endpoints import setup, auth, empresa, produtos, vendas, notas, clientes
 from app.db.session import engine, Base
 import os
@@ -10,6 +13,8 @@ os.makedirs("storage/certs", exist_ok=True)
 os.makedirs("storage/produtos", exist_ok=True)
 
 app = FastAPI(title="iTagREST - Sistema Fiscal para Restaurantes", version="0.1.0")
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Servir arquivos estáticos (Imagens de Produtos)
 app.mount("/static/produtos", StaticFiles(directory="storage/produtos"), name="produtos")

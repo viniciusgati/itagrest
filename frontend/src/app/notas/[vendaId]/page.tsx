@@ -88,16 +88,18 @@ export default function NotaFiscalDetailPage() {
             <p className="text-slate-500 dark:text-slate-400 font-medium text-sm uppercase tracking-widest">Venda #{vendaId}</p>
           </div>
 
-          <button 
-            onClick={handleEmitir}
-            disabled={emitting}
-            className={`px-8 py-4 rounded-2xl font-black text-sm uppercase tracking-widest transition-all shadow-lg flex items-center gap-3 active:scale-95 ${
-              emitting ? 'bg-slate-400 cursor-not-allowed' : 'bg-brand-600 hover:bg-brand-700 text-white'
-            }`}
-          >
-            {emitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCcw className="w-4 h-4" />}
-            {nota?.status_sefaz === '100' ? 'Reemitir (Substituir)' : 'Emitir NFC-e Agora'}
-          </button>
+          {nota?.status_sefaz !== '100' && (
+            <button 
+              onClick={handleEmitir}
+              disabled={emitting}
+              className={`px-8 py-4 rounded-2xl font-black text-sm uppercase tracking-widest transition-all shadow-lg flex items-center gap-3 active:scale-95 ${
+                emitting ? 'bg-slate-400 cursor-not-allowed' : 'bg-brand-600 hover:bg-brand-700 text-white'
+              }`}
+            >
+              {emitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCcw className="w-4 h-4" />}
+              Emitir NFC-e Agora
+            </button>
+          )}
         </div>
 
         {/* Status Card */}

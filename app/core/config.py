@@ -37,9 +37,16 @@ class Settings:
     CERT_DIR: str = os.getenv("CERT_DIR", "storage/certs")
     
     # JWT
-    SECRET_KEY: str = os.getenv("SECRET_KEY", "SUA_CHAVE_SECRETA_SUPER_SEGURA")
+    SECRET_KEY: str = os.getenv("SECRET_KEY", "")
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24 horas
 
 # Singleton
 settings = Settings()
+
+# Validar SECRET_KEY (nunca usar o default)
+if settings.ENV != "test" and (not settings.SECRET_KEY or len(settings.SECRET_KEY) < 16):
+    raise RuntimeError(
+        "SECRET_KEY não configurada ou muito curta. "
+        "Defina uma SECRET_KEY forte no .env (mínimo 16 caracteres)."
+    )

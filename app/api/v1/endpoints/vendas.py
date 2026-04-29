@@ -207,7 +207,7 @@ def fechar_venda(
 def cancelar_venda(
     venda_id: int, 
     db: Session = Depends(get_db),
-    current_user: Usuario = Depends(get_current_user)
+    current_user: Usuario = get_current_gerente
 ):
     venda = db.query(VendaModel).filter(VendaModel.id == venda_id).first()
     if not venda or venda.status == StatusVenda.PAGA:

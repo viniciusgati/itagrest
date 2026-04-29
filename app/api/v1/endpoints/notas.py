@@ -7,7 +7,7 @@ from app.models.venda import Venda, StatusVenda
 from app.models.nota_fiscal import NotaFiscal as NotaFiscalModel
 from app.services.sefaz import SefazService
 from pydantic import BaseModel
-from app.api.v1.deps import get_current_user, get_current_gerente
+from app.api.v1.deps import get_current_user, get_current_user_query_token, get_current_gerente
 from app.models.usuario import Usuario
 
 router = APIRouter()
@@ -42,6 +42,16 @@ def emitir_nota(
     if not venda:
         raise HTTPException(status_code=404, detail="Venda não encontrada")
     
+    nota_existente = db.query(NotaFiscalModel).filter(
+        NotaFiscalModel.venda_id == venda_id,
+        NotaFiscalModel.status_sefaz == '100'
+    ).first()
+    if nota_existente:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Esta venda já possui uma NFC-e autorizada pela SEFAZ. Não é possível emitir novamente."
+        )
+    
     try:
         # Tenta emitir via SefazService
         nota = SefazService.emitir_nfce(db, venda)
@@ -74,7 +84,7 @@ def imprimir_danfe(
     venda_id: int, 
     largura: int = 80, 
     db: Session = Depends(get_db),
-    current_user: Usuario = Depends(get_current_user)
+    current_user: Usuario = Depends(get_current_user_query_token)
 ):
     """
     Gera e retorna o PDF da DANFE para impressão.
@@ -95,7 +105,7 @@ def imprimir_danfe(
 def imprimir_danfe_a4(
     venda_id: int, 
     db: Session = Depends(get_db),
-    current_user: Usuario = Depends(get_current_user)
+    current_user: Usuario = Depends(get_current_user_query_token)
 ):
     """
     Gera e retorna o PDF da DANFE completa (A4) para impressão.
@@ -141,16 +151,4 @@ def get_xml_log(
         "logs": nota.logs_transmissao
     }
 
-@router.get("/debug/pfx")
-def debug_pfx(
-    current_user: Usuario = get_current_gerente
-):
-    """Endpoint temporário para diagnóstico profundo do certificado e inspeção de classes."""
-    import subprocess
-    try:
-        # Roda a inspeção da NFe
-        result = subprocess.run(["python3", "inspect_nfe.py"], capture_output=True, text=True)
-        return {"output": result.stdout, "error": result.stderr}
-    except Exception as e:
-        return {"error": str(e)}
 

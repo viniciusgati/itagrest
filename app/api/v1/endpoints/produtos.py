@@ -8,6 +8,9 @@ from app.services.imagem import ImagemService
 from app.api.v1.deps import get_current_user, get_current_gerente
 from app.models.usuario import Usuario
 
+ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
+MAX_IMAGE_SIZE = 5 * 1024 * 1024  # 5MB
+
 router = APIRouter()
 
 from app.services.migracao import MigracaoService
@@ -23,6 +26,8 @@ async def importar_xml(
         raise HTTPException(status_code=400, detail="O arquivo deve ser um XML.")
     
     content = await file.read()
+    if len(content) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Arquivo XML muito grande. Máximo 10MB.")
     try:
         qtd = MigracaoService.importar_produtos_xml(content, db)
         return {"message": f"Sucesso! {qtd} produtos importados ou atualizados."}
@@ -128,8 +133,14 @@ async def upload_produto_imagem(
     if produto.imagem_url:
         ImagemService.excluir_imagem(produto.imagem_url)
         
-    # 2. Salvar nova imagem
+    # 2. Validar tipo e tamanho
     content = await file.read()
+    if len(content) > MAX_IMAGE_SIZE:
+        raise HTTPException(status_code=400, detail="Imagem muito grande. Máximo 5MB.")
+    if file.content_type not in ALLOWED_IMAGE_TYPES:
+        raise HTTPException(status_code=400, detail=f"Tipo de arquivo não permitido: {file.content_type}")
+    
+    # 3. Salvar nova imagem
     path = ImagemService.salvar_imagem_produto(content, file.filename)
     
     # 3. Atualizar produto
