@@ -2,9 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Search, FileText, Code, CheckCircle2, XCircle, Clock, ExternalLink, Loader2, Printer, File } from 'lucide-react'
+import { Search, FileText, Code, CheckCircle2, XCircle, Clock, ExternalLink, Loader2, Printer, File } from 'lucide-react'
 import api, { getImageUrl } from '@/lib/api'
-import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
 
 
@@ -57,17 +56,10 @@ export default function VendasMonitorPage() {
     <div className="min-h-screen bg-slate-100 dark:bg-slate-900 p-6 md:p-10 font-sans transition-colors duration-300">
       <div className="max-w-7xl mx-auto space-y-10">
         
-        {/* Header de Navegação */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-6">
-            <Link href="/dashboard" className="w-12 h-12 bg-white dark:bg-slate-800 rounded-2xl flex items-center justify-center shadow-sm border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 transition-all">
-              <ArrowLeft className="w-5 h-5 text-slate-600 dark:text-slate-300" />
-            </Link>
-            <div>
-              <h1 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">Monitor de Operações</h1>
-              <p className="text-slate-400 dark:text-slate-500 font-medium">Histórico de vendas e auditoria SEFAZ</p>
-            </div>
-          </div>
+        {/* Header */}
+        <div>
+          <h1 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">Monitor de Operações</h1>
+          <p className="text-slate-400 dark:text-slate-500 font-medium">Histórico de vendas e auditoria SEFAZ</p>
         </div>
 
         {/* Barra de Filtros */}

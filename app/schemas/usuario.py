@@ -10,11 +10,14 @@ class UsuarioBase(BaseModel):
 
 class UsuarioCreate(UsuarioBase):
     password: str
+    papel: Optional[PapelUsuario] = PapelUsuario.GARCOM
 
 class UsuarioUpdate(BaseModel):
     full_name: Optional[str] = None
     email: Optional[EmailStr] = None
     password: Optional[str] = None
+    papel: Optional[PapelUsuario] = None
+    is_active: Optional[int] = None
 
 class Usuario(UsuarioBase):
     id: int

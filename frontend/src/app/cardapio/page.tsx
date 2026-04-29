@@ -1,8 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { Plus, Search, UtensilsCrossed, Beer, Edit2, Trash2, X, Upload, Check, Loader2, ArrowLeft } from 'lucide-react'
-import Link from 'next/link'
+import { Plus, Search, UtensilsCrossed, Beer, Edit2, Trash2, X, Upload, Check, Loader2 } from 'lucide-react'
 import api, { getImageUrl } from '@/lib/api'
 
 export default function CardapioPage() {
@@ -118,16 +117,11 @@ export default function CardapioPage() {
     <div className="min-h-screen bg-slate-100 dark:bg-slate-900 p-6 md:p-10 font-sans transition-colors duration-300">
       <div className="max-w-7xl mx-auto">
         
-        {/* Header com Botão de Voltar */}
+        {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-10">
-          <div className="flex items-center gap-6">
-            <Link href="/dashboard" className="w-12 h-12 bg-white dark:bg-slate-800 rounded-2xl flex items-center justify-center shadow-sm border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 transition-all">
-              <ArrowLeft className="w-5 h-5 text-slate-600 dark:text-slate-300" />
-            </Link>
-            <div>
-              <h1 className="text-4xl font-black text-slate-900 dark:text-white tracking-tight leading-none">Gestão do Cardápio</h1>
-              <p className="text-slate-500 dark:text-slate-400 mt-2 font-medium">Cadastre e organize seus produtos e pratos.</p>
-            </div>
+          <div>
+            <h1 className="text-4xl font-black text-slate-900 dark:text-white tracking-tight leading-none">Gestão do Cardápio</h1>
+            <p className="text-slate-500 dark:text-slate-400 mt-2 font-medium">Cadastre e organize seus produtos e pratos.</p>
           </div>
           <div className="flex gap-4 w-full md:w-auto">
             <input type="file" ref={xmlInputRef} className="hidden" accept=".xml" onChange={handleImportXML} />
