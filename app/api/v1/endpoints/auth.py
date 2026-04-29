@@ -1,12 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
+from typing import List
 from app.db.session import get_db
 from app.models.usuario import Usuario, PapelUsuario
 from app.core.security import verify_password, create_access_token, get_password_hash
 from app.schemas.token import Token
-from app.schemas.usuario import UsuarioCreate, Usuario as UsuarioSchema
-from app.api.v1.deps import get_current_gerente
+from app.schemas.usuario import UsuarioCreate, UsuarioUpdate, Usuario as UsuarioSchema
+from app.api.v1.deps import get_current_user, get_current_gerente
 
 router = APIRouter()
 
@@ -37,9 +38,19 @@ def login_access_token(
         "token_type": "bearer",
     }
 
+@router.get("/me", response_model=UsuarioSchema)
+def read_current_user(current_user: Usuario = Depends(get_current_user)):
+    """Retorna os dados do usuário logado."""
+    return current_user
+
+@router.get("/users", response_model=List[UsuarioSchema], dependencies=[get_current_gerente])
+def list_users(db: Session = Depends(get_db)):
+    """Lista todos os usuários. Apenas gerente."""
+    return db.query(Usuario).order_by(Usuario.created_at.desc()).all()
+
 @router.post("/register", response_model=UsuarioSchema, dependencies=[get_current_gerente])
 def register_usuario(user_in: UsuarioCreate, db: Session = Depends(get_db)):
-    """Cria um novo usuário (garçom). Apenas gerente pode executar."""
+    """Cria um novo usuário. Apenas gerente pode executar."""
     existing = db.query(Usuario).filter(
         (Usuario.username == user_in.username) | (Usuario.email == user_in.email)
     ).first()
@@ -55,7 +66,7 @@ def register_usuario(user_in: UsuarioCreate, db: Session = Depends(get_db)):
         username=user_in.username,
         email=user_in.email,
         hashed_password=get_password_hash(user_in.password),
-        papel=PapelUsuario.GARCOM,
+        papel=user_in.papel or PapelUsuario.GARCOM,
         is_active=1
     )
     
@@ -64,3 +75,25 @@ def register_usuario(user_in: UsuarioCreate, db: Session = Depends(get_db)):
     db.refresh(new_user)
     
     return new_user
+
+@router.put("/users/{user_id}", response_model=UsuarioSchema, dependencies=[get_current_gerente])
+def update_usuario(user_id: int, user_in: UsuarioUpdate, db: Session = Depends(get_db)):
+    """Atualiza dados de um usuário. Apenas gerente."""
+    user = db.query(Usuario).filter(Usuario.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado")
+    
+    if user_in.full_name is not None:
+        user.full_name = user_in.full_name
+    if user_in.email is not None:
+        user.email = user_in.email
+    if user_in.password is not None:
+        user.hashed_password = get_password_hash(user_in.password)
+    if user_in.papel is not None:
+        user.papel = user_in.papel
+    if user_in.is_active is not None:
+        user.is_active = user_in.is_active
+    
+    db.commit()
+    db.refresh(user)
+    return user

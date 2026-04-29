@@ -2,11 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { ArrowLeft, RefreshCcw, FileText, Code, CheckCircle2, XCircle, AlertTriangle, Loader2, Clipboard, Printer, File } from 'lucide-react'
+import { RefreshCcw, FileText, Code, CheckCircle2, XCircle, AlertTriangle, Loader2, Clipboard, Printer, File } from 'lucide-react'
 import api, { getImageUrl } from '@/lib/api'
-
-import Link from 'next/link'
-import { motion } from 'framer-motion'
 
 export default function NotaFiscalDetailPage() {
   const { vendaId } = useParams()
@@ -86,14 +83,9 @@ export default function NotaFiscalDetailPage() {
         
         {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="flex items-center gap-6">
-            <button onClick={() => router.back()} className="w-12 h-12 bg-white dark:bg-slate-800 rounded-2xl flex items-center justify-center shadow-sm border border-slate-200 dark:border-slate-700 hover:bg-slate-50 transition-all">
-              <ArrowLeft className="w-5 h-5 text-slate-600 dark:text-slate-300" />
-            </button>
-            <div>
-              <h1 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">Gestão Fiscal</h1>
-              <p className="text-slate-500 font-medium text-sm uppercase tracking-widest">Venda #{vendaId}</p>
-            </div>
+          <div>
+            <h1 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">Gestão Fiscal</h1>
+            <p className="text-slate-500 dark:text-slate-400 font-medium text-sm uppercase tracking-widest">Venda #{vendaId}</p>
           </div>
 
           <button 

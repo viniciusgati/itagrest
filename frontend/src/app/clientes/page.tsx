@@ -1,9 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Plus, Search, User, Edit2, Trash2, X, ArrowLeft, Loader2, Mail, Phone, FileText } from 'lucide-react'
+import { Plus, Search, User, Edit2, Trash2, X, Loader2, Mail, Phone, FileText } from 'lucide-react'
 import api from '@/lib/api'
-import Link from 'next/link'
 import { motion } from 'framer-motion'
 
 
@@ -67,14 +66,9 @@ export default function ClientesPage() {
         
         {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-10 text-slate-900 dark:text-white">
-          <div className="flex items-center gap-6">
-            <Link href="/dashboard" className="w-12 h-12 bg-white dark:bg-slate-800 rounded-2xl flex items-center justify-center shadow-sm border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 transition-all">
-              <ArrowLeft className="w-5 h-5 text-slate-600 dark:text-slate-300" />
-            </Link>
-            <div>
-              <h1 className="text-4xl font-black tracking-tight">Clientes</h1>
-              <p className="text-slate-500 dark:text-slate-400 mt-1">Gestão de clientes e faturamento nominal.</p>
-            </div>
+          <div>
+            <h1 className="text-4xl font-black tracking-tight">Clientes</h1>
+            <p className="text-slate-500 dark:text-slate-400 mt-1">Gestão de clientes e faturamento nominal.</p>
           </div>
           <button onClick={() => openModal()} className="px-8 py-4 bg-brand-600 hover:bg-brand-700 text-white rounded-2xl font-black text-sm uppercase tracking-widest transition-all shadow-lg flex items-center gap-3">
             <Plus className="w-5 h-5" /> Novo Cliente

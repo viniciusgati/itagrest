@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { UtensilsCrossed, Search, ShoppingCart, X, ChevronRight, CreditCard, QrCode, DollarSign, Check, Loader2, ArrowLeft, Trash2, RotateCcw, FileText } from 'lucide-react'
+import { UtensilsCrossed, Search, ShoppingCart, X, ChevronRight, CreditCard, QrCode, DollarSign, Check, Loader2, Trash2, RotateCcw, FileText } from 'lucide-react'
 import api, { getImageUrl } from '@/lib/api'
 import { motion, AnimatePresence } from 'framer-motion'
 import { QRCodeSVG } from 'qrcode.react'
@@ -43,15 +43,10 @@ export default function PDVPage() {
   return (
     <div className="min-h-screen bg-slate-100 dark:bg-slate-900 text-slate-900 dark:text-white p-6 md:p-10 flex flex-col gap-8 font-sans transition-colors duration-300">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-6">
-          <Link href="/dashboard" className="w-12 h-12 bg-white dark:bg-slate-800 rounded-2xl flex items-center justify-center hover:bg-slate-50 dark:hover:bg-slate-700 transition-all border border-slate-200 dark:border-slate-700 shadow-lg shadow-black/5">
-            <ArrowLeft className="w-5 h-5 text-slate-400" />
-          </Link>
-          <div>
-            <h1 className="text-3xl font-black tracking-tight">Mapa de Mesas</h1>
-            <p className="text-slate-400 font-medium uppercase text-[10px] tracking-widest italic">Terminal de Operação em Tempo Real</p>
-          </div>
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">Mapa de Mesas</h1>
+          <p className="text-slate-400 dark:text-slate-500 font-medium uppercase text-[10px] tracking-widest italic">Terminal de Operação em Tempo Real</p>
         </div>
         <Link href="/vendas" className="flex items-center gap-2 px-6 py-3 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-xl text-xs font-black uppercase tracking-widest border border-slate-200 dark:border-slate-700 transition-all shadow-lg shadow-black/5">
           <FileText className="w-4 h-4 text-brand-500" /> Monitor

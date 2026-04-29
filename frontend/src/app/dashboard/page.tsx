@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { TrendingUp, Users, DollarSign, Package, ArrowUpRight, ArrowDownRight, ShieldCheck, UtensilsCrossed, RotateCcw, Sun, Moon, Loader2 } from 'lucide-react'
+import { TrendingUp, Users, DollarSign, Package, ArrowUpRight, ArrowDownRight, ShieldCheck, UtensilsCrossed, Sun, Moon, Loader2 } from 'lucide-react'
 import api from '@/lib/api'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell } from 'recharts'
 import Link from 'next/link'
@@ -158,16 +158,9 @@ export default function DashboardPage() {
           <QuickAction 
             href="/vendas" 
             title="Monitor" 
-            desc="Histórico e Fiscal" 
+            desc="Histórico de Vendas" 
             icon={<ShieldCheck className="w-5 h-5" />} 
             color="bg-slate-900 dark:bg-slate-700"
-          />
-          <QuickAction 
-            href="/wizard-fiscal" 
-            title="Fiscal" 
-            desc="Empresa e PFX" 
-            icon={<RotateCcw className="w-5 h-5" />} 
-            color="bg-amber-500"
           />
         </div>
 
