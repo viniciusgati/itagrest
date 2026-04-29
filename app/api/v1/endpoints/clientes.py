@@ -1,3 +1,4 @@
+import subprocess
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from sqlalchemy.orm import Session
 from typing import List
@@ -37,8 +38,8 @@ async def extrair_cnpj_pdf(
         if not dados.cnpj:
             raise HTTPException(status_code=422, detail="Não foi possível encontrar o CNPJ no PDF. Verifique se é um Cartão CNPJ válido.")
         return dados
-    except ValueError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+    except (ValueError, FileNotFoundError, subprocess.TimeoutExpired) as e:
+        raise HTTPException(status_code=422, detail=f"Erro ao processar PDF: {str(e)}")
 
 @router.post("", response_model=Cliente, status_code=status.HTTP_201_CREATED)
 def criar_cliente(
