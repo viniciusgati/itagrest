@@ -1,5 +1,4 @@
 import api from '@/lib/api';
-import { Decimal } from 'decimal.js';
 
 export interface VendaItemCreate {
   produto_id: number;
