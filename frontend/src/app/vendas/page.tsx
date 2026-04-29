@@ -2,18 +2,18 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Search, FileText, Code, CheckCircle2, XCircle, Clock, ExternalLink, Loader2, Printer, File } from 'lucide-react'
+import { Search, FileText, Code, CheckCircle2, XCircle, Clock, Loader2, Printer, File, Share2 } from 'lucide-react'
 import api, { getImageUrl } from '@/lib/api'
 import { motion, AnimatePresence } from 'framer-motion'
 
-
-
-export default function VendasMonitorPage() {
+export default function VendasPage() {
   const router = useRouter()
   const [vendas, setVendas] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearch] = useState('')
   const [logView, setLogView] = useState<string | null>(null)
+  const [user, setUser] = useState<any>(null)
+  const isGerente = user?.papel === 'GERENTE'
 
   const fetchVendas = async () => {
     setLoading(true)
@@ -26,6 +26,7 @@ export default function VendasMonitorPage() {
 
   useEffect(() => {
     fetchVendas()
+    api.get('/auth/me').then(res => setUser(res.data)).catch(() => {})
   }, [])
 
   const handleViewXml = (vendaId: number) => {
@@ -46,6 +47,20 @@ export default function VendasMonitorPage() {
     router.push(`/notas/${vendaId}`)
   }
 
+  const handleShare = async (vendaId: number) => {
+    const token = localStorage.getItem('token')
+    const baseUrl = getImageUrl('').replace(/\/api\/v1\/?$/, '')
+    const url = `${baseUrl}/api/v1/notas/${vendaId}/imprimir-a4?token=${token}`
+    const text = `iTagREST - DANFE Venda #${vendaId}`
+
+    if (navigator.share) {
+      await navigator.share({ title: text, text, url })
+    } else {
+      await navigator.clipboard.writeText(url)
+      alert('Link da DANFE copiado! Compartilhe no WhatsApp.')
+    }
+  }
+
   const filteredVendas = vendas.filter(v => 
     v.id.toString().includes(searchTerm) || 
     v.mesa.toString().includes(searchTerm) ||
@@ -58,8 +73,8 @@ export default function VendasMonitorPage() {
         
         {/* Header */}
         <div>
-          <h1 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">Monitor de Operações</h1>
-          <p className="text-slate-400 dark:text-slate-500 font-medium">Histórico de vendas e auditoria SEFAZ</p>
+          <h1 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">Vendas</h1>
+          <p className="text-slate-400 dark:text-slate-500 font-medium">Histórico de vendas</p>
         </div>
 
         {/* Barra de Filtros */}
@@ -133,17 +148,27 @@ export default function VendasMonitorPage() {
                         <File className="w-4 h-4" />
                       </button>
                       <button 
-                        onClick={() => handleViewLog(v.id)}
-                        className="p-3 bg-slate-50 dark:bg-slate-900 hover:bg-brand-600 hover:text-white text-slate-600 dark:text-slate-400 rounded-xl transition-all shadow-sm" title="Ver Logs"
+                        onClick={() => handleShare(v.id)}
+                        className="p-3 bg-slate-50 dark:bg-slate-900 hover:bg-green-600 hover:text-white text-slate-600 dark:text-slate-400 rounded-xl transition-all shadow-sm" title="Compartilhar DANFE"
                       >
-                        <FileText className="w-4 h-4" />
+                        <Share2 className="w-4 h-4" />
                       </button>
-                      <button 
-                        onClick={() => handleViewXml(v.id)}
-                        className="p-3 bg-slate-50 dark:bg-slate-900 hover:bg-emerald-600 hover:text-white text-slate-600 dark:text-slate-400 rounded-xl transition-all shadow-sm" title="Ver XML"
-                      >
-                        <Code className="w-4 h-4" />
-                      </button>
+                      {isGerente && (
+                        <>
+                          <button 
+                            onClick={() => handleViewLog(v.id)}
+                            className="p-3 bg-slate-50 dark:bg-slate-900 hover:bg-brand-600 hover:text-white text-slate-600 dark:text-slate-400 rounded-xl transition-all shadow-sm" title="Ver Logs"
+                          >
+                            <FileText className="w-4 h-4" />
+                          </button>
+                          <button 
+                            onClick={() => handleViewXml(v.id)}
+                            className="p-3 bg-slate-50 dark:bg-slate-900 hover:bg-emerald-600 hover:text-white text-slate-600 dark:text-slate-400 rounded-xl transition-all shadow-sm" title="Ver XML"
+                          >
+                            <Code className="w-4 h-4" />
+                          </button>
+                        </>
+                      )}
                     </div>
                   </td>
                 </tr>

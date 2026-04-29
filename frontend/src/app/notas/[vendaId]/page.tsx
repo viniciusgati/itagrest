@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { RefreshCcw, FileText, Code, CheckCircle2, XCircle, AlertTriangle, Loader2, Clipboard, Printer, File } from 'lucide-react'
+import { RefreshCcw, FileText, Code, CheckCircle2, XCircle, AlertTriangle, Loader2, Clipboard, Printer, File, Share2 } from 'lucide-react'
 import api, { getImageUrl } from '@/lib/api'
 
 export default function NotaFiscalDetailPage() {
@@ -144,6 +144,21 @@ export default function NotaFiscalDetailPage() {
                     className="flex-1 px-6 py-3 bg-blue-600 dark:bg-blue-700 text-white rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-blue-700 transition-all flex items-center justify-center gap-2 shadow-lg"
                   >
                     <File className="w-4 h-4" /> DANFE A4
+                  </button>
+                  <button 
+                    onClick={() => {
+                      const token = localStorage.getItem('token')
+                      const url = `${window.location.origin}/api/v1/notas/${vendaId}/imprimir-a4?token=${token}`
+                      if (navigator.share) {
+                        navigator.share({ title: `DANFE Venda #${vendaId}`, url })
+                      } else {
+                        navigator.clipboard.writeText(url)
+                        alert('Link da DANFE copiado!')
+                      }
+                    }}
+                    className="flex-1 px-6 py-3 bg-emerald-600 dark:bg-emerald-700 text-white rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-emerald-700 transition-all flex items-center justify-center gap-2 shadow-lg"
+                  >
+                    <Share2 className="w-4 h-4" /> Compartilhar
                   </button>
                 </div>
               </div>

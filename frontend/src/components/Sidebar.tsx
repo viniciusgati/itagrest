@@ -24,7 +24,7 @@ const principalLinks = [
   { href: '/pdv', label: 'Terminal PDV', icon: UtensilsCrossed },
   { href: '/cardapio', label: 'Cardápio', icon: Package },
   { href: '/clientes', label: 'Clientes', icon: Users },
-  { href: '/vendas', label: 'Monitor', icon: ShieldCheck },
+  { href: '/vendas', label: 'Vendas', icon: ShieldCheck },
 ]
 
 const adminLinks = [
