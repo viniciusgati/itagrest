@@ -1,8 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { FileText, CheckCircle2, AlertCircle, Search, ExternalLink, Download, RefreshCcw } from 'lucide-react'
-import api from '@/lib/api'
+import { FileText, CheckCircle2, AlertCircle, Search, ExternalLink, Download, RefreshCcw, Printer } from 'lucide-react'
+import api, { getImageUrl } from '@/lib/api'
 
 export default function MonitorFiscalPage() {
   const [notas, setNotas] = useState([])
@@ -70,8 +70,15 @@ export default function MonitorFiscalPage() {
                         <button className="p-2 hover:bg-brand-50 rounded-lg text-brand-600 transition-all shadow-sm border border-brand-100" title="Ver XML">
                           <FileText className="w-4 h-4" />
                         </button>
-                        <button className="p-2 hover:bg-slate-900 rounded-lg text-white transition-all shadow-lg" title="Imprimir DANFE">
-                          <Download className="w-4 h-4" />
+                        <button 
+                          onClick={() => {
+                            const token = localStorage.getItem('token');
+                            window.open(getImageUrl(`/api/v1/notas/${nota.venda_id}/imprimir?token=${token}`), '_blank');
+                          }}
+                          className="p-2 hover:bg-slate-900 rounded-lg text-white transition-all shadow-lg" 
+                          title="Imprimir DANFE"
+                        >
+                          <Printer className="w-4 h-4" />
                         </button>
                       </div>
                     </td>

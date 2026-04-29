@@ -34,7 +34,8 @@ export default function VendasMonitorPage() {
   }
 
   const handlePrint = (vendaId: number) => {
-    window.open(getImageUrl(`/api/v1/notas/${vendaId}/imprimir`), '_blank')
+    const token = localStorage.getItem('token')
+    window.open(getImageUrl(`/api/v1/notas/${vendaId}/imprimir?token=${token}`), '_blank')
   }
 
   const handleViewLog = async (vendaId: number) => {

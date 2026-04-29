@@ -325,7 +325,11 @@ export default function ComandaMobilePage() {
                       <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-600 mx-auto"><Check className="w-10 h-10" /></div>
                       <p className="text-xl font-black text-emerald-600 uppercase">Autorizada!</p>
                       <button 
-                        onClick={() => { window.open(getImageUrl(`/api/v1/notas/${venda.id}/imprimir`), '_blank'); router.push('/pdv') }}
+                        onClick={() => { 
+                          const token = localStorage.getItem('token');
+                          window.open(getImageUrl(`/api/v1/notas/${venda.id}/imprimir?token=${token}`), '_blank'); 
+                          router.push('/pdv') 
+                        }}
                         className="w-full mt-4 bg-slate-900 dark:bg-brand-600 text-white py-4 rounded-2xl font-black uppercase tracking-widest text-xs flex items-center justify-center gap-3"
                       >
                         <Printer className="w-5 h-5" /> Imprimir Cupom
