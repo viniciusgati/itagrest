@@ -91,6 +91,26 @@ def imprimir_danfe(
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+@router.get("/{venda_id}/imprimir-a4")
+def imprimir_danfe_a4(
+    venda_id: int, 
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user)
+):
+    """
+    Gera e retorna o PDF da DANFE completa (A4) para impressão.
+    """
+    try:
+        from fastapi.responses import StreamingResponse
+        pdf_buffer = SefazService.gerar_danfe_a4(db, venda_id)
+        return StreamingResponse(
+            pdf_buffer, 
+            media_type="application/pdf",
+            headers={"Content-Disposition": f"inline; filename=danfe_a4_{venda_id}.pdf"}
+        )
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
 @router.get("/status/{venda_id}", response_model=NotaFiscalResponse)
 def get_nota_venda(
     venda_id: int, 

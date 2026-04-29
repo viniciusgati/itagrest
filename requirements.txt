@@ -17,3 +17,5 @@ python-barcode
 reportlab
 lxml
 erpbrasil.edoc.pdf
+brazilfiscalreport
+fpdf2

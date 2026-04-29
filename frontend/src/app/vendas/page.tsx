@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Search, FileText, Code, CheckCircle2, XCircle, Clock, ExternalLink, Loader2, Printer } from 'lucide-react'
+import { ArrowLeft, Search, FileText, Code, CheckCircle2, XCircle, Clock, ExternalLink, Loader2, Printer, File } from 'lucide-react'
 import api, { getImageUrl } from '@/lib/api'
 import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -36,6 +36,11 @@ export default function VendasMonitorPage() {
   const handlePrint = (vendaId: number) => {
     const token = localStorage.getItem('token')
     window.open(getImageUrl(`/api/v1/notas/${vendaId}/imprimir?token=${token}`), '_blank')
+  }
+
+  const handlePrintA4 = (vendaId: number) => {
+    const token = localStorage.getItem('token')
+    window.open(getImageUrl(`/api/v1/notas/${vendaId}/imprimir-a4?token=${token}`), '_blank')
   }
 
   const handleViewLog = async (vendaId: number) => {
@@ -125,9 +130,15 @@ export default function VendasMonitorPage() {
                     <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button 
                         onClick={() => handlePrint(v.id)}
-                        className="p-3 bg-slate-50 dark:bg-slate-900 hover:bg-slate-800 hover:text-white text-slate-600 dark:text-slate-400 rounded-xl transition-all shadow-sm" title="Imprimir DANFE"
+                        className="p-3 bg-slate-50 dark:bg-slate-900 hover:bg-slate-800 hover:text-white text-slate-600 dark:text-slate-400 rounded-xl transition-all shadow-sm" title="Imprimir Cupom (80mm)"
                       >
                         <Printer className="w-4 h-4" />
+                      </button>
+                      <button 
+                        onClick={() => handlePrintA4(v.id)}
+                        className="p-3 bg-slate-50 dark:bg-slate-900 hover:bg-blue-600 hover:text-white text-slate-600 dark:text-slate-400 rounded-xl transition-all shadow-sm" title="Imprimir DANFE A4"
+                      >
+                        <File className="w-4 h-4" />
                       </button>
                       <button 
                         onClick={() => handleViewLog(v.id)}

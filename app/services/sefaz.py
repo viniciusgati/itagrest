@@ -235,3 +235,23 @@ class SefazService:
             qr_code = QrCodeWidget(f"{url_b}?p={p_p}|{cHs}"); d = Drawing(100, 100); d.add(qr_code); renderPDF.draw(d, c, center_x - 50, y - 110)
         
         c.save(); buffer.seek(0); return buffer
+
+    @staticmethod
+    def gerar_danfe_a4(db: Session, venda_id: int) -> io.BytesIO:
+        """
+        Gera a DANFE completa em formato A4 (PDF) usando a biblioteca brazilfiscalreport.
+        Ideal para impressoras laser/jato de tinta.
+        """
+        from brazilfiscalreport.danfe import Danfe
+        nota = db.query(NotaFiscalModel).filter(NotaFiscalModel.venda_id == venda_id).first()
+        if not nota or not nota.xml_autorizado: 
+            raise Exception("Nota não autorizada para esta venda ou XML de autorização ausente.")
+        
+        try:
+            # O XML autorizado deve conter a tag nfeProc (NFe + Protocolo)
+            xml_content = nota.xml_autorizado.encode('utf-8')
+            danfe = Danfe(xml_content)
+            pdf_bytes = danfe.output()
+            return io.BytesIO(pdf_bytes)
+        except Exception as e:
+            raise Exception(f"Erro ao gerar DANFE A4: {str(e)}")

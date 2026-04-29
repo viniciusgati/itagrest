@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { ArrowLeft, RefreshCcw, FileText, Code, CheckCircle2, XCircle, AlertTriangle, Loader2, Clipboard } from 'lucide-react'
-import api from '@/lib/api'
+import { ArrowLeft, RefreshCcw, FileText, Code, CheckCircle2, XCircle, AlertTriangle, Loader2, Clipboard, Printer, File } from 'lucide-react'
+import api, { getImageUrl } from '@/lib/api'
+
 import Link from 'next/link'
 import { motion } from 'framer-motion'
 
@@ -59,6 +60,16 @@ export default function NotaFiscalDetailPage() {
     } finally {
       setEmitting(false)
     }
+  }
+
+  const handlePrint = () => {
+    const token = localStorage.getItem('token')
+    window.open(getImageUrl(`/api/v1/notas/${vendaId}/imprimir?token=${token}`), '_blank')
+  }
+
+  const handlePrintA4 = () => {
+    const token = localStorage.getItem('token')
+    window.open(getImageUrl(`/api/v1/notas/${vendaId}/imprimir-a4?token=${token}`), '_blank')
   }
 
   if (loading) {
@@ -121,9 +132,26 @@ export default function NotaFiscalDetailPage() {
               {nota?.motivo_sefaz || 'Sem informações da SEFAZ no momento.'}
             </p>
             {nota?.chave_acesso && (
-              <div className="mt-4 inline-flex items-center gap-2 bg-white dark:bg-slate-800 px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-[10px] font-mono font-bold text-slate-500 uppercase">
-                Chave: {nota.chave_acesso}
-                <button onClick={() => navigator.clipboard.writeText(nota.chave_acesso)} className="hover:text-brand-500"><Clipboard className="w-3 h-3" /></button>
+              <div className="flex flex-col gap-4">
+                <div className="inline-flex items-center gap-2 bg-white dark:bg-slate-800 px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-[10px] font-mono font-bold text-slate-500 uppercase">
+                  Chave: {nota.chave_acesso}
+                  <button onClick={() => navigator.clipboard.writeText(nota.chave_acesso)} className="hover:text-brand-500"><Clipboard className="w-3 h-3" /></button>
+                </div>
+                
+                <div className="flex items-center gap-3">
+                  <button 
+                    onClick={handlePrint}
+                    className="flex-1 px-6 py-3 bg-slate-900 dark:bg-slate-700 text-white rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-slate-800 transition-all flex items-center justify-center gap-2 shadow-lg"
+                  >
+                    <Printer className="w-4 h-4" /> Cupom 80mm
+                  </button>
+                  <button 
+                    onClick={handlePrintA4}
+                    className="flex-1 px-6 py-3 bg-blue-600 dark:bg-blue-700 text-white rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-blue-700 transition-all flex items-center justify-center gap-2 shadow-lg"
+                  >
+                    <File className="w-4 h-4" /> DANFE A4
+                  </button>
+                </div>
               </div>
             )}
           </div>
