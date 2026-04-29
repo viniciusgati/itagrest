@@ -96,85 +96,67 @@ export default function VendasPage() {
 
         {/* Grid de Auditoria */}
         <div className="bg-white dark:bg-slate-800 rounded-[3rem] border border-slate-100 dark:border-slate-700 shadow-2xl overflow-hidden">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-slate-900 dark:bg-slate-950 text-white uppercase text-[10px] font-black tracking-[0.2em]">
-                <th className="py-6 px-8">ID / Data</th>
-                <th className="py-6 px-8">Mesa</th>
-                <th className="py-6 px-8">Cliente</th>
-                <th className="py-6 px-8">Total</th>
-                <th className="py-6 px-8">Pagamento</th>
-                <th className="py-6 px-8 text-center">Status</th>
-                <th className="py-6 px-8 text-right">Auditoria</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-700 text-slate-900 dark:text-slate-200">
-              {filteredVendas.map((v) => (
-                <tr key={v.id} className="hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors group">
-                  <td className="py-6 px-8">
-                    <p className="font-black text-slate-900 dark:text-white text-sm">#{v.id}</p>
-                    <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase">{new Date(v.data_abertura).toLocaleString()}</p>
-                  </td>
-                  <td className="py-6 px-8">
-                    <span className="w-10 h-10 bg-slate-100 dark:bg-slate-900 rounded-xl flex items-center justify-center font-black text-slate-600 dark:text-slate-400">
-                      {v.mesa}
-                    </span>
-                  </td>
-                  <td className="py-6 px-8">
-                    <p className="font-bold text-slate-900 dark:text-white text-sm">{v.cliente?.nome || 'CONSUMIDOR'}</p>
-                    <p className="text-[10px] text-slate-400 font-medium">{v.cliente?.documento || 'Sem identificação'}</p>
-                  </td>
-                  <td className="py-6 px-8">
-                    <span className="font-black text-slate-900 dark:text-white">R$ {parseFloat(v.total).toFixed(2)}</span>
-                  </td>
-                  <td className="py-6 px-8">
-                    <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase bg-slate-100 dark:bg-slate-900 px-3 py-1 rounded-lg">{v.forma_pagamento || 'PENDENTE'}</span>
-                  </td>
-                  <td className="py-6 px-8 text-center">
-                    <StatusBadge status={v.status} />
-                  </td>
-                  <td className="py-6 px-8 text-right">
-                    <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button 
-                        onClick={() => handlePrint(v.id)}
-                        className="p-3 bg-slate-50 dark:bg-slate-900 hover:bg-slate-800 hover:text-white text-slate-600 dark:text-slate-400 rounded-xl transition-all shadow-sm" title="Imprimir Cupom (80mm)"
-                      >
-                        <Printer className="w-4 h-4" />
-                      </button>
-                      <button 
-                        onClick={() => handlePrintA4(v.id)}
-                        className="p-3 bg-slate-50 dark:bg-slate-900 hover:bg-blue-600 hover:text-white text-slate-600 dark:text-slate-400 rounded-xl transition-all shadow-sm" title="Imprimir DANFE A4"
-                      >
-                        <File className="w-4 h-4" />
-                      </button>
-                      <button 
-                        onClick={() => handleShare(v.id)}
-                        className="p-3 bg-slate-50 dark:bg-slate-900 hover:bg-green-600 hover:text-white text-slate-600 dark:text-slate-400 rounded-xl transition-all shadow-sm" title="Compartilhar DANFE"
-                      >
-                        <Share2 className="w-4 h-4" />
-                      </button>
-                      {isGerente && (
-                        <>
-                          <button 
-                            onClick={() => handleViewLog(v.id)}
-                            className="p-3 bg-slate-50 dark:bg-slate-900 hover:bg-brand-600 hover:text-white text-slate-600 dark:text-slate-400 rounded-xl transition-all shadow-sm" title="Ver Logs"
-                          >
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse min-w-[700px]">
+              <thead>
+                <tr className="bg-slate-900 dark:bg-slate-950 text-white uppercase text-[10px] font-black tracking-[0.2em]">
+                  <th className="py-4 px-4 md:py-6 md:px-8">ID / Data</th>
+                  <th className="py-4 px-4 md:py-6 md:px-8">Mesa</th>
+                  <th className="py-4 px-4 md:py-6 md:px-8">Cliente</th>
+                  <th className="py-4 px-4 md:py-6 md:px-8">Total</th>
+                  <th className="py-4 px-4 md:py-6 md:px-8">Pagamento</th>
+                  <th className="py-4 px-4 md:py-6 md:px-8 text-center">Status</th>
+                  <th className="py-4 px-4 md:py-6 md:px-8 text-right">Ações</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-700 text-slate-900 dark:text-slate-200">
+                {filteredVendas.map((v) => (
+                  <tr key={v.id} className="hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors">
+                    <td className="py-4 px-4 md:py-6 md:px-8">
+                      <p className="font-black text-slate-900 dark:text-white text-sm">#{v.id}</p>
+                      <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase">{new Date(v.data_abertura).toLocaleString()}</p>
+                    </td>
+                    <td className="py-4 px-4 md:py-6 md:px-8">
+                      <span className="w-8 h-8 md:w-10 md:h-10 bg-slate-100 dark:bg-slate-900 rounded-xl flex items-center justify-center font-black text-slate-600 dark:text-slate-400 text-sm">
+                        {v.mesa}
+                      </span>
+                    </td>
+                    <td className="py-4 px-4 md:py-6 md:px-8">
+                      <p className="font-bold text-slate-900 dark:text-white text-sm truncate max-w-[120px] md:max-w-none">{v.cliente?.nome || 'CONSUMIDOR'}</p>
+                      <p className="text-[10px] text-slate-400 font-medium">{v.cliente?.documento || ''}</p>
+                    </td>
+                    <td className="py-4 px-4 md:py-6 md:px-8">
+                      <span className="font-black text-slate-900 dark:text-white">R$ {parseFloat(v.total).toFixed(2)}</span>
+                    </td>
+                    <td className="py-4 px-4 md:py-6 md:px-8">
+                      <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase bg-slate-100 dark:bg-slate-900 px-2 md:px-3 py-1 rounded-lg">{v.forma_pagamento || '—'}</span>
+                    </td>
+                    <td className="py-4 px-4 md:py-6 md:px-8 text-center">
+                      <StatusBadge status={v.status} />
+                    </td>
+                    <td className="py-4 px-4 md:py-6 md:px-8 text-right">
+                      <div className="flex items-center justify-end gap-1 md:gap-2">
+                        <button onClick={() => handlePrint(v.id)} className="p-2 md:p-3 bg-slate-100 dark:bg-slate-800 hover:bg-slate-800 hover:text-white text-slate-600 dark:text-slate-400 rounded-xl transition-all" title="Imprimir Cupom (80mm)">
+                          <Printer className="w-4 h-4" />
+                        </button>
+                        <button onClick={() => handlePrintA4(v.id)} className="p-2 md:p-3 bg-slate-100 dark:bg-slate-800 hover:bg-blue-600 hover:text-white text-slate-600 dark:text-slate-400 rounded-xl transition-all" title="Imprimir DANFE A4">
+                          <File className="w-4 h-4" />
+                        </button>
+                        <button onClick={() => handleShare(v.id)} className="p-2 md:p-3 bg-slate-100 dark:bg-slate-800 hover:bg-green-600 hover:text-white text-slate-600 dark:text-slate-400 rounded-xl transition-all" title="Compartilhar DANFE">
+                          <Share2 className="w-4 h-4" />
+                        </button>
+                        {isGerente && (
+                          <button onClick={() => handleViewLog(v.id)} className="p-2 md:p-3 bg-slate-100 dark:bg-slate-800 hover:bg-brand-600 hover:text-white text-slate-600 dark:text-slate-400 rounded-xl transition-all" title="Ver Logs">
                             <FileText className="w-4 h-4" />
                           </button>
-                          <button 
-                            onClick={() => handleViewXml(v.id)}
-                            className="p-3 bg-slate-50 dark:bg-slate-900 hover:bg-emerald-600 hover:text-white text-slate-600 dark:text-slate-400 rounded-xl transition-all shadow-sm" title="Ver XML"
-                          >
-                            <Code className="w-4 h-4" />
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
           {filteredVendas.length === 0 && !loading && (
             <div className="p-20 text-center space-y-4">
               <Clock className="w-12 h-12 text-slate-200 mx-auto" />
