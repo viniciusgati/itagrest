@@ -185,24 +185,32 @@ export default function ComandaMobilePage() {
       const parsed = await api.post('/clientes/extrair-cnpj-pdf', fd)
       const d = parsed.data
 
-      const newClient = await api.post('/clientes', {
-        nome: d.razao_social || d.nome_fantasia || 'Cliente',
-        documento: d.cnpj,
-        email: d.email || '',
-        telefone: d.telefone || '',
-        logradouro: d.logradouro || '',
-        numero: d.numero || '',
-        bairro: d.bairro || '',
-        municipio_nome: d.municipio || '',
-        uf: d.uf || '',
-      })
-      const cliente = newClient.data
+      const docLimpo = d.cnpj.replace(/\D/g, '')
+      let cliente
+
+      try {
+        const existente = await api.get(`/clientes/buscar-doc/${docLimpo}`)
+        cliente = existente.data
+      } catch {
+        const newClient = await api.post('/clientes', {
+          nome: d.razao_social || d.nome_fantasia || 'Cliente',
+          documento: d.cnpj,
+          email: d.email || '',
+          telefone: d.telefone || '',
+          logradouro: d.logradouro || '',
+          numero: d.numero || '',
+          bairro: d.bairro || '',
+          municipio_nome: d.municipio || '',
+          uf: d.uf || '',
+        })
+        cliente = newClient.data
+      }
 
       await api.put(`/vendas/${venda.id}/fechar`, { cliente_id: cliente.id })
 
       setClienteEncontrado(cliente)
       setShowClienteSearch(false)
-      setToast(`Cliente ${cliente.nome} salvo com sucesso!`)
+      setToast(`Cliente ${cliente.nome} vinculado com sucesso!`)
       setTimeout(() => setToast(null), 3000)
       fetchVenda()
     } catch (err: any) {
