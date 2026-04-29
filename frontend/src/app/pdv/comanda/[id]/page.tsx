@@ -120,29 +120,32 @@ export default function ComandaMobilePage() {
       let finalCliente = clienteObj
       
       if (!clienteId) {
-        // Busca por documento se não foi passado um ID direto (auto-complete)
         const cleanDoc = clienteDoc.replace(/\D/g, '')
-        const res = await api.get(`/clientes/buscar-doc/${cleanDoc}`)
-        finalCliente = res.data
+        try {
+          const res = await api.get(`/clientes/buscar-doc/${cleanDoc}`)
+          finalCliente = res.data
+        } catch {
+          const res = await api.post('/clientes', {
+            nome: cleanDoc.length > 11 ? `Empresa ${cleanDoc.slice(-4)}` : `Consumidor`,
+            documento: cleanDoc,
+          })
+          finalCliente = res.data
+        }
       }
       
       await api.put(`/vendas/${venda.id}/fechar`, { cliente_id: finalCliente.id })
       
       setClienteEncontrado(finalCliente)
-      setJustLinked(true)
-      
-      // Pequeno delay para mostrar o sucesso antes de fechar o modal
-      setTimeout(() => {
-        setJustLinked(false)
-        setShowClienteSearch(false)
-        setShowNomeSearch(false)
-        fetchVenda()
-        setClienteDoc('')
-        setNomeQuery('')
-        setSugestoes([])
-      }, 1500)
-    } catch (err) {
-      alert("Cliente não encontrado. Cadastre-o primeiro.")
+      setShowClienteSearch(false)
+      setShowNomeSearch(false)
+      setToast(`Cliente ${finalCliente.nome} vinculado!`)
+      setTimeout(() => setToast(null), 3000)
+      fetchVenda()
+      setClienteDoc('')
+      setNomeQuery('')
+      setSugestoes([])
+    } catch (err: any) {
+      alert(err.response?.data?.detail || "Erro ao vincular cliente")
     } finally {
       setIsSearchingCliente(false)
     }
