@@ -1,6 +1,7 @@
 from pydantic import BaseModel, EmailStr
 from typing import Optional
 from datetime import datetime
+from app.models.usuario import PapelUsuario
 
 class UsuarioBase(BaseModel):
     full_name: str
@@ -19,6 +20,7 @@ class Usuario(UsuarioBase):
     id: int
     created_at: datetime
     is_active: int
+    papel: PapelUsuario
 
     class Config:
         from_attributes = True

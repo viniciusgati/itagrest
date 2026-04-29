@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.db.session import get_db
-from app.models.usuario import Usuario
+from app.models.usuario import Usuario, PapelUsuario
 from app.schemas.usuario import UsuarioCreate, Usuario as UsuarioSchema
 from app.core.security import get_password_hash
 
@@ -29,6 +29,7 @@ def setup_admin(user_in: UsuarioCreate, db: Session = Depends(get_db)):
         username=user_in.username,
         email=user_in.email,
         hashed_password=get_password_hash(user_in.password),
+        papel=PapelUsuario.GERENTE,
         is_active=1
     )
     
