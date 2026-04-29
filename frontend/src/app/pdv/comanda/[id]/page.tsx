@@ -173,18 +173,18 @@ export default function ComandaMobilePage() {
     }
   }
 
+  const [toast, setToast] = useState<string | null>(null)
+
   const handleImportPdf = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
     setImportingPdf(true)
     try {
-      // 1. Extrair dados do PDF
       const fd = new FormData()
       fd.append('file', file)
       const parsed = await api.post('/clientes/extrair-cnpj-pdf', fd)
       const d = parsed.data
 
-      // 2. Criar cliente
       const newClient = await api.post('/clientes', {
         nome: d.razao_social || d.nome_fantasia || 'Cliente',
         documento: d.cnpj,
@@ -198,16 +198,13 @@ export default function ComandaMobilePage() {
       })
       const cliente = newClient.data
 
-      // 3. Vincular à venda
       await api.put(`/vendas/${venda.id}/fechar`, { cliente_id: cliente.id })
 
       setClienteEncontrado(cliente)
-      setJustLinked(true)
-      setTimeout(() => {
-        setJustLinked(false)
-        setShowClienteSearch(false)
-        fetchVenda()
-      }, 1500)
+      setShowClienteSearch(false)
+      setToast(`Cliente ${cliente.nome} salvo com sucesso!`)
+      setTimeout(() => setToast(null), 3000)
+      fetchVenda()
     } catch (err: any) {
       alert(err.response?.data?.detail || "Erro ao importar Cartão CNPJ")
     } finally {
@@ -687,6 +684,22 @@ export default function ComandaMobilePage() {
               </div>
             </motion.div>
           </div>
+        )}
+      </AnimatePresence>
+
+      {/* Toast */}
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            initial={{ opacity: 0, y: 50 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 50 }}
+            className="fixed bottom-24 inset-x-0 z-[200] flex justify-center pointer-events-none"
+          >
+            <div className="bg-emerald-600 text-white px-8 py-5 rounded-2xl shadow-2xl font-black text-sm flex items-center gap-3 pointer-events-auto">
+              <Check className="w-5 h-5" /> {toast}
+            </div>
+          </motion.div>
         )}
       </AnimatePresence>
     </div>
