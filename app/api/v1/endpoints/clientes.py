@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from sqlalchemy.orm import Session
 from typing import List
 from app.db.session import get_db
@@ -6,6 +6,7 @@ from app.models.cliente import Cliente as ClienteModel
 from app.schemas.cliente import Cliente, ClienteCreate, ClienteUpdate
 from app.api.v1.deps import get_current_user
 from app.models.usuario import Usuario
+from app.services.parser_cnpj import extrair_cnpj_do_pdf
 
 router = APIRouter()
 
@@ -17,6 +18,27 @@ def listar_clientes(
     current_user: Usuario = Depends(get_current_user)
 ):
     return db.query(ClienteModel).offset(skip).limit(limit).all()
+
+@router.post("/extrair-cnpj-pdf")
+async def extrair_cnpj_pdf(
+    file: UploadFile = File(...),
+    current_user: Usuario = Depends(get_current_user)
+):
+    """Extrai dados de cliente de um Cartão CNPJ (PDF da Receita Federal)."""
+    if not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="O arquivo deve ser um PDF.")
+
+    content = await file.read()
+    if len(content) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="PDF muito grande. Máximo 5MB.")
+
+    try:
+        dados = extrair_cnpj_do_pdf(content)
+        if not dados.cnpj:
+            raise HTTPException(status_code=422, detail="Não foi possível encontrar o CNPJ no PDF. Verifique se é um Cartão CNPJ válido.")
+        return dados
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
 
 @router.post("", response_model=Cliente, status_code=status.HTTP_201_CREATED)
 def criar_cliente(

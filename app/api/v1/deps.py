@@ -7,29 +7,14 @@ from app.core.config import settings
 from app.db.session import get_db
 from app.models.usuario import Usuario, PapelUsuario
 
-# auto_error=False permite que a gente valide o token manualmente (ex: via query param)
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
 
-def get_current_user(
-    db: Session = Depends(get_db),
-    token_header: Optional[str] = Depends(oauth2_scheme),
-    token_query: Optional[str] = Query(None, alias="token")
-) -> Usuario:
+def _validate_user(token: str, db: Session) -> Usuario:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Não foi possível validar as credenciais",
         headers={"WWW-Authenticate": "Bearer"},
     )
-    
-    # Prioriza o token do Header, mas aceita do Query Param (útil para impressões/downloads em nova aba)
-    token = token_header or token_query
-    
-    if not token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Não autenticado. Forneça o token no header Authorization ou via query param 'token'."
-        )
-
     try:
         payload = jwt.decode(
             token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
@@ -43,7 +28,35 @@ def get_current_user(
     user = db.query(Usuario).filter(Usuario.id == int(user_id)).first()
     if user is None:
         raise credentials_exception
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Usuário inativo"
+        )
     return user
+
+def get_current_user(
+    db: Session = Depends(get_db),
+    token: Optional[str] = Depends(oauth2_scheme),
+) -> Usuario:
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Não autenticado. Forneça o token no header Authorization."
+        )
+    return _validate_user(token, db)
+
+# Apenas para rotas de impressão/download que precisam abrir em nova aba
+def get_current_user_query_token(
+    db: Session = Depends(get_db),
+    token_query: Optional[str] = Query(None, alias="token")
+) -> Usuario:
+    if not token_query:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Não autenticado. Forneça o token via query param 'token'."
+        )
+    return _validate_user(token_query, db)
 
 def check_role(required_roles: list[PapelUsuario]):
     def role_verifier(current_user: Usuario = Depends(get_current_user)):

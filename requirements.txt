@@ -19,3 +19,4 @@ lxml
 erpbrasil.edoc.pdf
 brazilfiscalreport
 fpdf2
+slowapi

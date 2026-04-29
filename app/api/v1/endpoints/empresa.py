@@ -1,3 +1,4 @@
+import os
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 from sqlalchemy.orm import Session
 from app.db.session import get_db
@@ -60,8 +61,10 @@ async def upload_certificado(
             detail="Apenas arquivos .pfx são permitidos."
         )
     
-    # 2. Ler conteúdo para validação
+    # 2. Validar tamanho
     content = await file.read()
+    if len(content) > 1 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Arquivo PFX muito grande. Máximo 1MB.")
     
     # 3. Validar Certificado PFX
     if not CertificadoService.validar_pfx(content, senha):
@@ -70,20 +73,23 @@ async def upload_certificado(
             detail="Senha do certificado inválida ou arquivo corrompido."
         )
         
-    # 4. Salvar Certificado
-    path = CertificadoService.salvar_pfx(content, file.filename)
-    
-    # 5. Atualizar Empresa no Banco
+    # 4. Buscar empresa e remover certificado antigo se existir
     empresa = db.query(EmpresaModel).first()
     if not empresa:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Configure os dados da empresa (Passo 1) antes de enviar o certificado."
         )
-        
+    if empresa.certificado_path and os.path.exists(empresa.certificado_path):
+        os.remove(empresa.certificado_path)
+    
+    # 5. Salvar Novo Certificado
+    path = CertificadoService.salvar_pfx(content, file.filename)
+    
+    # 6. Atualizar Empresa no Banco
     empresa.certificado_path = path
     empresa.certificado_senha = senha
-    empresa.configurado = True # Marca como concluído o wizard fiscal
+    empresa.configurado = True
     
     db.commit()
     

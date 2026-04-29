@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { 
   ArrowLeft, Search, Plus, Trash2, 
@@ -33,6 +33,8 @@ export default function ComandaMobilePage() {
   const [clienteEncontrado, setClienteEncontrado] = useState<any>(null)
   const [isSearchingCliente, setIsSearchingCliente] = useState(false)
   const [justLinked, setJustLinked] = useState(false)
+  const [importingPdf, setImportingPdf] = useState(false)
+  const pdfFileRef = useRef<HTMLInputElement>(null)
 
   // Auto-complete de Clientes por Nome
   useEffect(() => {
@@ -138,6 +140,49 @@ export default function ComandaMobilePage() {
       alert("Cliente não encontrado. Cadastre-o primeiro.")
     } finally {
       setIsSearchingCliente(false)
+    }
+  }
+
+  const handleImportPdf = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setImportingPdf(true)
+    try {
+      // 1. Extrair dados do PDF
+      const fd = new FormData()
+      fd.append('file', file)
+      const parsed = await api.post('/clientes/extrair-cnpj-pdf', fd)
+      const d = parsed.data
+
+      // 2. Criar cliente
+      const newClient = await api.post('/clientes', {
+        nome: d.razao_social || d.nome_fantasia || 'Cliente',
+        documento: d.cnpj,
+        email: d.email || '',
+        telefone: d.telefone || '',
+        logradouro: d.logradouro || '',
+        numero: d.numero || '',
+        bairro: d.bairro || '',
+        municipio_nome: d.municipio || '',
+        uf: d.uf || '',
+      })
+      const cliente = newClient.data
+
+      // 3. Vincular à venda
+      await api.put(`/vendas/${venda.id}/fechar`, { cliente_id: cliente.id })
+
+      setClienteEncontrado(cliente)
+      setJustLinked(true)
+      setTimeout(() => {
+        setJustLinked(false)
+        setShowClienteSearch(false)
+        fetchVenda()
+      }, 1500)
+    } catch (err: any) {
+      alert(err.response?.data?.detail || "Erro ao importar Cartão CNPJ")
+    } finally {
+      setImportingPdf(false)
+      if (pdfFileRef.current) pdfFileRef.current.value = ''
     }
   }
 
@@ -472,14 +517,28 @@ export default function ComandaMobilePage() {
                    )}
                  </button>
                  
-                 {!justLinked && (
-                   <button 
-                    onClick={() => { setShowClienteSearch(false); setShowNomeSearch(true); }}
-                    className="w-full py-4 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-2xl font-black uppercase tracking-widest text-[10px] flex items-center justify-center gap-2"
-                   >
-                     <Search className="w-4 h-4" /> Buscar por Nome
-                   </button>
-                 )}
+                  {!justLinked && (
+                    <button 
+                     onClick={() => { setShowClienteSearch(false); setShowNomeSearch(true); }}
+                     className="w-full py-4 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-2xl font-black uppercase tracking-widest text-[10px] flex items-center justify-center gap-2"
+                    >
+                      <Search className="w-4 h-4" /> Buscar por Nome
+                    </button>
+                  )}
+
+                  {!justLinked && (
+                    <>
+                      <input ref={pdfFileRef} type="file" accept=".pdf" className="hidden" onChange={handleImportPdf} />
+                      <button
+                        disabled={importingPdf}
+                        onClick={() => pdfFileRef.current?.click()}
+                        className="w-full py-4 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-2xl font-black uppercase tracking-widest text-[10px] flex items-center justify-center gap-2 disabled:opacity-50"
+                      >
+                        {importingPdf ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                        Importar Cartão CNPJ
+                      </button>
+                    </>
+                  )}
                </div>
                
                {!isSearchingCliente && !justLinked && (
