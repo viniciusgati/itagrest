@@ -57,6 +57,7 @@ Thumbs.db
 
 # AIOX Local
 .aiox-core/local/
+.aiox/sessions/
 .claude/settings.local.json
 .aiox/install-log.txt
 temp_libs/
