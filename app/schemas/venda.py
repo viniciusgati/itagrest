@@ -23,6 +23,10 @@ class VendaItemBase(BaseModel):
 class VendaItemCreate(VendaItemBase):
     preco_customizado: Optional[Decimal] = None
 
+class VendaItemUpdate(BaseModel):
+    quantidade: Optional[int] = None
+    preco_unitario: Optional[Decimal] = None
+
 class VendaItem(VendaItemBase):
     id: int
     venda_id: int

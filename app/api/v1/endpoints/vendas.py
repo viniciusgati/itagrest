@@ -10,7 +10,7 @@ from app.db.session import get_db
 from app.models.venda import Venda as VendaModel, VendaItem as VendaItemModel, StatusVenda, FormaPagamento
 from app.models.produto import Produto as ProdutoModel
 from app.models.cliente import Cliente as ClienteModel
-from app.schemas.venda import Venda as VendaSchema, VendaCreate, VendaUpdate, VendaItemCreate, MesaStatus
+from app.schemas.venda import Venda as VendaSchema, VendaCreate, VendaUpdate, VendaItemCreate, VendaItemUpdate, MesaStatus
 
 from app.models.usuario import Usuario, PapelUsuario
 from app.api.v1.deps import get_current_gerente, get_current_user
@@ -152,6 +152,41 @@ def adicionar_item(
     venda.total = Decimal(venda.total) + subtotal
     db.commit()
     
+    return db.query(VendaModel).options(
+        joinedload(VendaModel.itens),
+        joinedload(VendaModel.cliente)
+    ).filter(VendaModel.id == venda_id).first()
+
+@router.put("/{venda_id}/itens/{item_id}", response_model=VendaSchema)
+def atualizar_item(
+    venda_id: int,
+    item_id: int,
+    item_in: VendaItemUpdate,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user)
+):
+    """Atualiza quantidade e/ou preço de um item na comanda."""
+    venda = db.query(VendaModel).filter(VendaModel.id == venda_id).first()
+    if not venda or venda.status != StatusVenda.ABERTA:
+        raise HTTPException(status_code=400, detail="Comanda não permite alterações.")
+
+    item = db.query(VendaItemModel).filter(VendaItemModel.id == item_id, VendaItemModel.venda_id == venda_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Item não encontrado.")
+
+    qtd = Decimal(item_in.quantidade) if item_in.quantidade is not None else item.quantidade
+    preco = item_in.preco_unitario if item_in.preco_unitario is not None else item.preco_unitario
+    novo_subtotal = qtd * preco
+
+    diff = novo_subtotal - Decimal(item.subtotal)
+
+    item.quantidade = qtd
+    item.preco_unitario = preco
+    item.subtotal = novo_subtotal
+    venda.total = Decimal(venda.total) + diff
+
+    db.commit()
+
     return db.query(VendaModel).options(
         joinedload(VendaModel.itens),
         joinedload(VendaModel.cliente)

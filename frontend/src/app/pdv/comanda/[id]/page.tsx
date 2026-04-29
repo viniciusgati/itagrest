@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { 
-  ArrowLeft, Search, Plus, Trash2, 
+  ArrowLeft, Search, Plus, Trash2, Pencil,
   CreditCard, X, Check, Loader2, DollarSign, 
   QrCode, Utensils, ShoppingBag, User, UserPlus, Printer, FileText
 } from 'lucide-react'
@@ -24,6 +24,11 @@ export default function ComandaMobilePage() {
   const [isEmitting, setIsEmitting] = useState(false)
   const [fiscalStatus, setFiscalStatus] = useState<any>(null)
   const [error, setError] = useState('')
+
+  const [editingItem, setEditingItem] = useState<any>(null)
+  const [editPreco, setEditPreco] = useState('')
+  const [editQtd, setEditQtd] = useState('')
+  const [savingItem, setSavingItem] = useState(false)
 
   const [showClienteSearch, setShowClienteSearch] = useState(false)
   const [showNomeSearch, setShowNomeSearch] = useState(false)
@@ -140,6 +145,31 @@ export default function ComandaMobilePage() {
       alert("Cliente não encontrado. Cadastre-o primeiro.")
     } finally {
       setIsSearchingCliente(false)
+    }
+  }
+
+  const handleEditItem = (item: any) => {
+    setEditingItem(item)
+    setEditPreco(parseFloat(item.preco_unitario).toFixed(2))
+    setEditQtd(String(item.quantidade))
+  }
+
+  const handleSaveItem = async () => {
+    if (!editingItem || !venda) return
+    setSavingItem(true)
+    try {
+      const payload: any = {}
+      const newPreco = parseFloat(editPreco)
+      const newQtd = parseInt(editQtd)
+      if (!isNaN(newPreco) && newPreco > 0) payload.preco_unitario = newPreco
+      if (!isNaN(newQtd) && newQtd > 0) payload.quantidade = newQtd
+      const res = await api.put(`/vendas/${venda.id}/itens/${editingItem.ids_originais[0]}`, payload)
+      setVenda(res.data)
+      setEditingItem(null)
+    } catch (err: any) {
+      alert(err.response?.data?.detail || "Erro ao alterar item")
+    } finally {
+      setSavingItem(false)
     }
   }
 
@@ -269,12 +299,13 @@ export default function ComandaMobilePage() {
 
         {getItensAgrupados().map((item: any) => (
           <motion.div layout key={item.produto_id} className="bg-white dark:bg-slate-800 p-5 rounded-[2rem] flex items-center justify-between shadow-sm border border-slate-50 dark:border-slate-700/50">
-            <div className="flex-1">
-              <h4 className="font-black text-slate-900 dark:text-white leading-tight">{item.produto.descricao}</h4>
+            <div className="flex-1 min-w-0">
+              <h4 className="font-black text-slate-900 dark:text-white leading-tight truncate">{item.produto.descricao}</h4>
               <p className="text-[11px] text-slate-400 font-bold uppercase mt-1">{item.quantidade}x R$ {parseFloat(item.preco_unitario).toFixed(2)}</p>
             </div>
-            <div className="flex items-center gap-5">
+            <div className="flex items-center gap-2 shrink-0">
               <span className="font-black text-slate-900 dark:text-white text-lg">R$ {item.subtotal.toFixed(2)}</span>
+              <button onClick={() => handleEditItem(item)} className="p-3 bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 rounded-2xl hover:bg-brand-50 hover:text-brand-600 transition-all"><Pencil className="w-4 h-4" /></button>
               <button onClick={() => handleRemoveItem(item.ids_originais)} className="p-3 bg-rose-50 dark:bg-rose-900/20 text-rose-500 rounded-2xl"><Trash2 className="w-4 h-4" /></button>
             </div>
           </motion.div>
@@ -613,6 +644,47 @@ export default function ComandaMobilePage() {
                    <button onClick={() => setShowNomeSearch(false)} className="py-4 text-slate-400 font-bold text-[10px] uppercase tracking-widest">Fechar</button>
                  </div>
                )}
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Modal Editar Preço */}
+      <AnimatePresence>
+        {editingItem && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setEditingItem(null)} className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" />
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="relative bg-white dark:bg-slate-800 w-full max-w-sm rounded-[2.5rem] shadow-2xl p-8 space-y-6">
+              <div className="text-center">
+                <h3 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Alterar Item</h3>
+                <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mt-1 truncate">{editingItem.produto.descricao}</p>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Preço Unitário (R$)</label>
+                  <input type="number" step="0.01" min="0"
+                    className="w-full px-6 py-4 bg-slate-50 dark:bg-slate-900 dark:text-white rounded-2xl outline-none font-black text-center text-lg focus:ring-4 focus:ring-brand-500/10"
+                    value={editPreco} onChange={e => setEditPreco(e.target.value)} />
+                </div>
+                <div>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Quantidade</label>
+                  <input type="number" step="1" min="1"
+                    className="w-full px-6 py-4 bg-slate-50 dark:bg-slate-900 dark:text-white rounded-2xl outline-none font-black text-center text-lg focus:ring-4 focus:ring-brand-500/10"
+                    value={editQtd} onChange={e => setEditQtd(e.target.value)} />
+                </div>
+              </div>
+
+              <div className="flex gap-3">
+                <button onClick={() => setEditingItem(null)}
+                  className="flex-1 py-4 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-2xl font-black uppercase tracking-widest text-xs">
+                  Cancelar
+                </button>
+                <button onClick={handleSaveItem} disabled={savingItem}
+                  className="flex-1 py-4 bg-brand-600 text-white rounded-2xl font-black uppercase tracking-widest text-xs shadow-xl flex items-center justify-center gap-2 disabled:opacity-50">
+                  {savingItem ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Salvar'}
+                </button>
+              </div>
             </motion.div>
           </div>
         )}
