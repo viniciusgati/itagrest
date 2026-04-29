@@ -12,15 +12,18 @@ from app.models.produto import Produto as ProdutoModel
 from app.models.cliente import Cliente as ClienteModel
 from app.schemas.venda import Venda as VendaSchema, VendaCreate, VendaUpdate, VendaItemCreate, MesaStatus
 
-from app.models.usuario import Usuario
-from app.api.v1.deps import get_current_gerente
+from app.models.usuario import Usuario, PapelUsuario
+from app.api.v1.deps import get_current_gerente, get_current_user
 
 router = APIRouter()
 
 # --- Mapa de Mesas ---
 
 @router.get("/mesas", response_model=List[MesaStatus])
-def get_status_mesas(db: Session = Depends(get_db)):
+def get_status_mesas(
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user)
+):
     """Retorna o status de todas as mesas, priorizando a venda mais recente se houver duplicidade por erro."""
     vendas_ativas = db.query(VendaModel).filter(
         VendaModel.status.in_([StatusVenda.ABERTA, StatusVenda.AGUARDANDO_PAGAMENTO])
@@ -43,7 +46,10 @@ def get_status_mesas(db: Session = Depends(get_db)):
     return status_mesas
 
 @router.get("/lista", response_model=List[VendaSchema])
-def get_vendas_lista(db: Session = Depends(get_db)):
+def get_vendas_lista(
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user)
+):
     """Retorna o histórico das últimas 50 vendas com itens e cliente carregados."""
     try:
         return db.query(VendaModel).options(
@@ -57,7 +63,11 @@ def get_vendas_lista(db: Session = Depends(get_db)):
 # --- Gerenciamento de Vendas ---
 
 @router.post("", response_model=VendaSchema)
-def abrir_venda(venda_in: VendaCreate, db: Session = Depends(get_db)):
+def abrir_venda(
+    venda_in: VendaCreate, 
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user)
+):
     """Abre uma nova mesa ou recupera a venda atual. Garante unicidade de venda ativa por mesa."""
     # 1. Tenta encontrar a venda existente
     venda_existente = db.query(VendaModel).options(
@@ -98,7 +108,12 @@ def abrir_venda(venda_in: VendaCreate, db: Session = Depends(get_db)):
     ).filter(VendaModel.id == new_venda.id).first()
 
 @router.post("/{venda_id}/itens", response_model=VendaSchema)
-def adicionar_item(venda_id: int, item_in: VendaItemCreate, db: Session = Depends(get_db)):
+def adicionar_item(
+    venda_id: int, 
+    item_in: VendaItemCreate, 
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user)
+):
     """Adiciona um produto à comanda com suporte a preço customizado e snapshot completo."""
     venda = db.query(VendaModel).filter(VendaModel.id == venda_id).first()
     if not venda or venda.status != StatusVenda.ABERTA:
@@ -143,7 +158,12 @@ def adicionar_item(venda_id: int, item_in: VendaItemCreate, db: Session = Depend
     ).filter(VendaModel.id == venda_id).first()
 
 @router.put("/{venda_id}/fechar", response_model=VendaSchema)
-def fechar_venda(venda_id: int, update_in: VendaUpdate, db: Session = Depends(get_db)):
+def fechar_venda(
+    venda_id: int, 
+    update_in: VendaUpdate, 
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user)
+):
     """Fecha a venda ou vincula um cliente."""
     venda = db.query(VendaModel).filter(VendaModel.id == venda_id).first()
     if not venda:
@@ -184,7 +204,11 @@ def fechar_venda(venda_id: int, update_in: VendaUpdate, db: Session = Depends(ge
     ).filter(VendaModel.id == venda_id).first()
 
 @router.delete("/{venda_id}/cancelar", status_code=status.HTTP_204_NO_CONTENT)
-def cancelar_venda(venda_id: int, db: Session = Depends(get_db)):
+def cancelar_venda(
+    venda_id: int, 
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user)
+):
     venda = db.query(VendaModel).filter(VendaModel.id == venda_id).first()
     if not venda or venda.status == StatusVenda.PAGA:
         raise HTTPException(status_code=400, detail="Não permitido.")
@@ -193,7 +217,12 @@ def cancelar_venda(venda_id: int, db: Session = Depends(get_db)):
     return None
 
 @router.delete("/{venda_id}/itens/{item_id}", response_model=VendaSchema)
-def cancelar_item(venda_id: int, item_id: int, db: Session = Depends(get_db)):
+def cancelar_item(
+    venda_id: int, 
+    item_id: int, 
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user)
+):
     venda = db.query(VendaModel).filter(VendaModel.id == venda_id).first()
     item = db.query(VendaItemModel).filter(VendaItemModel.id == item_id).first()
     if not item:

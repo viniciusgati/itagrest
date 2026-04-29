@@ -7,6 +7,8 @@ from app.models.venda import Venda, StatusVenda
 from app.models.nota_fiscal import NotaFiscal as NotaFiscalModel
 from app.services.sefaz import SefazService
 from pydantic import BaseModel
+from app.api.v1.deps import get_current_user, get_current_gerente
+from app.models.usuario import Usuario
 
 router = APIRouter()
 
@@ -26,7 +28,11 @@ class NotaFiscalResponse(BaseModel):
         from_attributes = True
 
 @router.post("/emitir/{venda_id}", response_model=NotaFiscalResponse)
-def emitir_nota(venda_id: int, db: Session = Depends(get_db)):
+def emitir_nota(
+    venda_id: int, 
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user)
+):
     """
     Aciona a geração e transmissão da NFC-e. 
     Este endpoint é resiliente: se a SEFAZ falhar, ele retorna a nota com status de erro
@@ -56,12 +62,20 @@ def emitir_nota(venda_id: int, db: Session = Depends(get_db)):
         )
 
 @router.get("/todas", response_model=List[NotaFiscalResponse])
-def list_notas(db: Session = Depends(get_db)):
+def list_notas(
+    db: Session = Depends(get_db),
+    current_user: Usuario = get_current_gerente
+):
     """Lista todas as notas fiscais emitidas."""
     return db.query(NotaFiscalModel).order_by(NotaFiscalModel.data_emissao.desc()).all()
 
 @router.get("/{venda_id}/imprimir")
-def imprimir_danfe(venda_id: int, largura: int = 80, db: Session = Depends(get_db)):
+def imprimir_danfe(
+    venda_id: int, 
+    largura: int = 80, 
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user)
+):
     """
     Gera e retorna o PDF da DANFE para impressão.
     largura: 80 para bobinas de 80mm, 58 para bobinas de 58mm.
@@ -78,7 +92,11 @@ def imprimir_danfe(venda_id: int, largura: int = 80, db: Session = Depends(get_d
         raise HTTPException(status_code=400, detail=str(e))
 
 @router.get("/status/{venda_id}", response_model=NotaFiscalResponse)
-def get_nota_venda(venda_id: int, db: Session = Depends(get_db)):
+def get_nota_venda(
+    venda_id: int, 
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user)
+):
     """Consulta o status fiscal de uma venda."""
     nota = db.query(NotaFiscalModel).filter(NotaFiscalModel.venda_id == venda_id).first()
     if not nota:
@@ -86,7 +104,11 @@ def get_nota_venda(venda_id: int, db: Session = Depends(get_db)):
     return nota
 
 @router.get("/{venda_id}/xml-log")
-def get_xml_log(venda_id: int, db: Session = Depends(get_db)):
+def get_xml_log(
+    venda_id: int, 
+    db: Session = Depends(get_db),
+    current_user: Usuario = get_current_gerente
+):
     """Retorna os logs e todos os XMLs (enviado, recebido, autorizado) de uma nota."""
     nota = db.query(NotaFiscalModel).filter(NotaFiscalModel.venda_id == venda_id).first()
     if not nota:
@@ -100,7 +122,9 @@ def get_xml_log(venda_id: int, db: Session = Depends(get_db)):
     }
 
 @router.get("/debug/pfx")
-def debug_pfx():
+def debug_pfx(
+    current_user: Usuario = get_current_gerente
+):
     """Endpoint temporário para diagnóstico profundo do certificado e inspeção de classes."""
     import subprocess
     try:

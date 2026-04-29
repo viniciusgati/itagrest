@@ -4,11 +4,16 @@ from app.db.session import get_db
 from app.models.empresa import Empresa as EmpresaModel
 from app.schemas.empresa import EmpresaCreate, Empresa as EmpresaSchema
 from app.services.certificado import CertificadoService
+from app.api.v1.deps import get_current_gerente, get_current_user
+from app.models.usuario import Usuario
 
 router = APIRouter()
 
 @router.get("/status", response_model=dict)
-def get_empresa_status(db: Session = Depends(get_db)):
+def get_empresa_status(
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user)
+):
     """Verifica se a empresa já está configurada."""
     empresa = db.query(EmpresaModel).first()
     return {
@@ -17,7 +22,11 @@ def get_empresa_status(db: Session = Depends(get_db)):
     }
 
 @router.post("/configurar", response_model=EmpresaSchema)
-def configurar_empresa(empresa_in: EmpresaCreate, db: Session = Depends(get_db)):
+def configurar_empresa(
+    empresa_in: EmpresaCreate, 
+    db: Session = Depends(get_db),
+    current_user: Usuario = get_current_gerente
+):
     """Salva os dados iniciais da empresa (CNPJ, IE, Endereço, etc.)."""
     empresa = db.query(EmpresaModel).first()
     
@@ -40,7 +49,8 @@ def configurar_empresa(empresa_in: EmpresaCreate, db: Session = Depends(get_db))
 async def upload_certificado(
     db: Session = Depends(get_db),
     file: UploadFile = File(...),
-    senha: str = Form(...)
+    senha: str = Form(...),
+    current_user: Usuario = get_current_gerente
 ):
     """Realiza o upload do certificado PFX e valida a senha."""
     # 1. Validar se o arquivo é .pfx

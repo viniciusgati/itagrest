@@ -5,13 +5,19 @@ from app.db.session import get_db
 from app.models.produto import Produto as ProdutoModel, CategoriaEnum
 from app.schemas.produto import ProdutoCreate, ProdutoUpdate, Produto as ProdutoSchema
 from app.services.imagem import ImagemService
+from app.api.v1.deps import get_current_user, get_current_gerente
+from app.models.usuario import Usuario
 
 router = APIRouter()
 
 from app.services.migracao import MigracaoService
 
 @router.post("/importar-xml", status_code=status.HTTP_200_OK)
-async def importar_xml(file: UploadFile = File(...), db: Session = Depends(get_db)):
+async def importar_xml(
+    file: UploadFile = File(...), 
+    db: Session = Depends(get_db),
+    current_user: Usuario = get_current_gerente
+):
     """Importa produtos de um arquivo XML legado (@PRODUTOS.XML)."""
     if not file.filename.lower().endswith('.xml'):
         raise HTTPException(status_code=400, detail="O arquivo deve ser um XML.")
@@ -28,7 +34,8 @@ def list_produtos(
     db: Session = Depends(get_db), 
     categoria: Optional[CategoriaEnum] = None,
     skip: int = 0, 
-    limit: int = 100
+    limit: int = 100,
+    current_user: Usuario = Depends(get_current_user)
 ):
     """Lista todos os produtos com filtro opcional de categoria."""
     query = db.query(ProdutoModel)
@@ -37,7 +44,11 @@ def list_produtos(
     return query.offset(skip).limit(limit).all()
 
 @router.get("/{produto_id}", response_model=ProdutoSchema)
-def get_produto(produto_id: int, db: Session = Depends(get_db)):
+def get_produto(
+    produto_id: int, 
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user)
+):
     """Obtém detalhes de um produto específico."""
     produto = db.query(ProdutoModel).filter(ProdutoModel.id == produto_id).first()
     if not produto:
@@ -45,7 +56,11 @@ def get_produto(produto_id: int, db: Session = Depends(get_db)):
     return produto
 
 @router.post("", response_model=ProdutoSchema, status_code=status.HTTP_201_CREATED)
-def create_produto(produto_in: ProdutoCreate, db: Session = Depends(get_db)):
+def create_produto(
+    produto_in: ProdutoCreate, 
+    db: Session = Depends(get_db),
+    current_user: Usuario = get_current_gerente
+):
     """Cria um novo produto no cardápio."""
     new_produto = ProdutoModel(**produto_in.model_dump())
     db.add(new_produto)
@@ -54,7 +69,12 @@ def create_produto(produto_in: ProdutoCreate, db: Session = Depends(get_db)):
     return new_produto
 
 @router.put("/{produto_id}", response_model=ProdutoSchema)
-def update_produto(produto_id: int, produto_in: ProdutoUpdate, db: Session = Depends(get_db)):
+def update_produto(
+    produto_id: int, 
+    produto_in: ProdutoUpdate, 
+    db: Session = Depends(get_db),
+    current_user: Usuario = get_current_gerente
+):
     """Atualiza dados de um produto existente."""
     produto = db.query(ProdutoModel).filter(ProdutoModel.id == produto_id).first()
     if not produto:
@@ -74,7 +94,11 @@ def update_produto(produto_id: int, produto_in: ProdutoUpdate, db: Session = Dep
     return produto
 
 @router.delete("/{produto_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_produto(produto_id: int, db: Session = Depends(get_db)):
+def delete_produto(
+    produto_id: int, 
+    db: Session = Depends(get_db),
+    current_user: Usuario = get_current_gerente
+):
     """Remove um produto do cardápio."""
     produto = db.query(ProdutoModel).filter(ProdutoModel.id == produto_id).first()
     if not produto:
@@ -92,7 +116,8 @@ def delete_produto(produto_id: int, db: Session = Depends(get_db)):
 async def upload_produto_imagem(
     produto_id: int, 
     file: UploadFile = File(...), 
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: Usuario = get_current_gerente
 ):
     """Faz o upload de uma imagem para um produto específico."""
     produto = db.query(ProdutoModel).filter(ProdutoModel.id == produto_id).first()
