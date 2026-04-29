@@ -13,7 +13,9 @@ export default function CardapioPage() {
   const [categoriaAtiva, setCategoriaAtiva] = useState('TODOS')
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [previewImage, setPreviewImage] = useState<string | null>(null)
+  const [user, setUser] = useState<any>(null)
   const xmlInputRef = useRef<HTMLInputElement>(null)
+  const isGerente = user?.papel === 'GERENTE'
 
   const fetchProdutos = async () => {
     setLoading(true)
@@ -26,6 +28,7 @@ export default function CardapioPage() {
 
   useEffect(() => {
     fetchProdutos()
+    api.get('/auth/me').then(res => setUser(res.data)).catch(() => {})
   }, [])
 
   const openModal = (produto: any = null) => {
@@ -124,16 +127,20 @@ export default function CardapioPage() {
             <p className="text-slate-500 dark:text-slate-400 mt-2 font-medium">Cadastre e organize seus produtos e pratos.</p>
           </div>
           <div className="flex gap-4 w-full md:w-auto">
-            <input type="file" ref={xmlInputRef} className="hidden" accept=".xml" onChange={handleImportXML} />
-            <button 
-              onClick={() => xmlInputRef.current?.click()}
-              className="bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 font-bold px-6 py-4 rounded-2xl transition-all border border-slate-200 dark:border-slate-700 shadow-sm flex items-center gap-2 flex-1 md:flex-none justify-center"
-            >
-              <Upload className="w-4 h-4" /> Importar XML
-            </button>
-            <button onClick={() => openModal()} className="bg-brand-600 hover:bg-brand-700 text-white font-black px-8 py-4 rounded-2xl transition-all shadow-lg shadow-brand-100 dark:shadow-none flex items-center gap-2 flex-1 md:flex-none justify-center uppercase text-sm tracking-widest">
-              <Plus className="w-5 h-5" /> Novo Produto
-            </button>
+            {isGerente && (
+              <>
+                <input type="file" ref={xmlInputRef} className="hidden" accept=".xml" onChange={handleImportXML} />
+                <button 
+                  onClick={() => xmlInputRef.current?.click()}
+                  className="bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 font-bold px-6 py-4 rounded-2xl transition-all border border-slate-200 dark:border-slate-700 shadow-sm flex items-center gap-2 flex-1 md:flex-none justify-center"
+                >
+                  <Upload className="w-4 h-4" /> Importar XML
+                </button>
+                <button onClick={() => openModal()} className="bg-brand-600 hover:bg-brand-700 text-white font-black px-8 py-4 rounded-2xl transition-all shadow-lg shadow-brand-100 dark:shadow-none flex items-center gap-2 flex-1 md:flex-none justify-center uppercase text-sm tracking-widest">
+                  <Plus className="w-5 h-5" /> Novo Produto
+                </button>
+              </>
+            )}
           </div>
         </div>
 
@@ -172,7 +179,7 @@ export default function CardapioPage() {
         ) : produtosFiltrados.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {produtosFiltrados.map((produto: any) => (
-              <ProdutoCard key={produto.id} produto={produto} onEdit={() => openModal(produto)} onDelete={() => handleDelete(produto.id)} />
+              <ProdutoCard key={produto.id} produto={produto} isGerente={isGerente} onEdit={() => openModal(produto)} onDelete={() => handleDelete(produto.id)} />
             ))}
           </div>
         ) : (
@@ -245,7 +252,7 @@ export default function CardapioPage() {
   )
 }
 
-function ProdutoCard({ produto, onEdit, onDelete }: any) {
+function ProdutoCard({ produto, isGerente, onEdit, onDelete }: any) {
   const getPlaceholder = (nome: string) => nome.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()
   return (
     <div className="bg-white dark:bg-slate-800 rounded-[2.5rem] border border-slate-100 dark:border-slate-700 shadow-xl overflow-hidden group hover:shadow-2xl transition-all flex flex-col text-slate-900 dark:text-white">
@@ -253,10 +260,12 @@ function ProdutoCard({ produto, onEdit, onDelete }: any) {
         {produto.imagem_url ? <img src={getImageUrl(produto.imagem_url)} alt={produto.descricao} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" /> : (
           <div className="w-full h-full bg-gradient-to-br from-brand-500 to-violet-600 flex items-center justify-center text-white text-4xl font-black opacity-80">{getPlaceholder(produto.descricao)}</div>
         )}
-        <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-all translate-y-2 group-hover:translate-y-0">
-          <button onClick={onEdit} className="w-10 h-10 bg-white/90 dark:bg-slate-800/90 backdrop-blur-md rounded-xl flex items-center justify-center text-slate-600 dark:text-slate-300 shadow-lg hover:bg-brand-600 hover:text-white transition-all"><Edit2 className="w-4 h-4" /></button>
-          <button onClick={onDelete} className="w-10 h-10 bg-white/90 dark:bg-slate-800/90 backdrop-blur-md rounded-xl flex items-center justify-center text-rose-500 shadow-lg hover:bg-rose-600 hover:text-white transition-all"><Trash2 className="w-4 h-4" /></button>
-        </div>
+        {isGerente && (
+          <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-all translate-y-2 group-hover:translate-y-0">
+            <button onClick={onEdit} className="w-10 h-10 bg-white/90 dark:bg-slate-800/90 backdrop-blur-md rounded-xl flex items-center justify-center text-slate-600 dark:text-slate-300 shadow-lg hover:bg-brand-600 hover:text-white transition-all"><Edit2 className="w-4 h-4" /></button>
+            <button onClick={onDelete} className="w-10 h-10 bg-white/90 dark:bg-slate-800/90 backdrop-blur-md rounded-xl flex items-center justify-center text-rose-500 shadow-lg hover:bg-rose-600 hover:text-white transition-all"><Trash2 className="w-4 h-4" /></button>
+          </div>
+        )}
       </div>
       <div className="p-6 space-y-4 flex-1 flex flex-col">
         <div className="flex-1">
