@@ -7,6 +7,7 @@ from app.models.venda import Venda, StatusVenda
 from app.models.nota_fiscal import NotaFiscal as NotaFiscalModel
 from app.services.sefaz import SefazService
 from pydantic import BaseModel
+from datetime import datetime
 from app.api.v1.deps import get_current_user, get_current_user_query_token, get_current_gerente
 from app.models.usuario import Usuario
 
@@ -23,7 +24,10 @@ class NotaFiscalResponse(BaseModel):
     xml_enviado: Optional[str] = None
     xml_recebido: Optional[str] = None
     xml_autorizado: Optional[str] = None
-    
+    protocolo_cancelamento: Optional[str] = None
+    motivo_cancelamento: Optional[str] = None
+    data_cancelamento: Optional[datetime] = None
+
     class Config:
         from_attributes = True
 
@@ -51,6 +55,15 @@ def emitir_nota(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Esta venda já possui uma NFC-e autorizada pela SEFAZ. Não é possível emitir novamente."
         )
+    nota_cancelada = db.query(NotaFiscalModel).filter(
+        NotaFiscalModel.venda_id == venda_id,
+        NotaFiscalModel.protocolo_cancelamento.isnot(None)
+    ).first()
+    if nota_cancelada:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Esta venda possui uma NFC-e cancelada. Não é possível emitir novamente."
+        )
     
     try:
         # Tenta emitir via SefazService
@@ -70,6 +83,26 @@ def emitir_nota(
             status_sefaz="ERRO",
             motivo_sefaz=str(e)
         )
+
+@router.post("/cancelar/{venda_id}", response_model=NotaFiscalResponse)
+def cancelar_nota(
+    venda_id: int,
+    body: dict,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(get_current_gerente)
+):
+    justificativa = (body.get("justificativa") or "").strip()
+    if len(justificativa) < 15:
+        raise HTTPException(status_code=400, detail="Justificativa deve ter no mínimo 15 caracteres.")
+    try:
+        nota = SefazService.cancelar_nfce(db, venda_id, justificativa)
+        return nota
+    except Exception as e:
+        db.rollback()
+        nota = db.query(NotaFiscalModel).filter(NotaFiscalModel.venda_id == venda_id).first()
+        if nota:
+            return nota
+        raise HTTPException(status_code=400, detail=str(e))
 
 @router.get("/todas", response_model=List[NotaFiscalResponse])
 def list_notas(

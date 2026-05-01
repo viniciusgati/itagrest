@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { RefreshCcw, FileText, Code, CheckCircle2, XCircle, AlertTriangle, Loader2, Clipboard, Printer, File, Share2 } from 'lucide-react'
+import { RefreshCcw, FileText, Code, CheckCircle2, XCircle, AlertTriangle, Loader2, Clipboard, Printer, File, Share2, Ban } from 'lucide-react'
 import api, { getImageUrl } from '@/lib/api'
+import { vendaService } from '@/services/venda.service'
 
 export default function NotaFiscalDetailPage() {
   const { vendaId } = useParams()
@@ -12,16 +13,20 @@ export default function NotaFiscalDetailPage() {
   const [venda, setVenda] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [emitting, setEmitting] = useState(false)
+  const [cancelling, setCancelling] = useState(false)
+  const [showCancelModal, setShowCancelModal] = useState(false)
+  const [justificativa, setJustificativa] = useState('')
   const [activeTab, setActiveTab] = useState<'logs' | 'xml_enviado' | 'xml_recebido' | 'xml_autorizado'>('logs')
+
+  const isAuthorized = nota?.status_sefaz === '100'
+  const isCanceled = !!nota?.protocolo_cancelamento
 
   const fetchData = async () => {
     setLoading(true)
     try {
-      // Busca status da nota
       const resNota = await api.get(`/notas/status/${vendaId}`)
       setNota(resNota.data)
       
-      // Busca dados da venda (opcional, para contexto)
       const resVenda = await api.get(`/vendas/lista`)
       const v = resVenda.data.find((item: any) => item.id === Number(vendaId))
       setVenda(v)
@@ -52,10 +57,33 @@ export default function NotaFiscalDetailPage() {
       }
     } catch (err: any) {
       alert("Erro no processamento SEFAZ. A nota pode não ter sido emitida.")
-      // Recarrega os dados para mostrar os logs do erro na tela
       fetchData()
     } finally {
       setEmitting(false)
+    }
+  }
+
+  const handleCancelar = async () => {
+    if (justificativa.trim().length < 15) {
+      alert("Justificativa deve ter no mínimo 15 caracteres.")
+      return
+    }
+    setCancelling(true)
+    try {
+      const res = await vendaService.cancelarNota(Number(vendaId), justificativa.trim())
+      setNota(res)
+      setShowCancelModal(false)
+      setJustificativa('')
+      if (res.status_sefaz === 'CANCELADA') {
+        alert("Nota cancelada com sucesso!")
+      } else {
+        alert("Falha no cancelamento: " + (res.motivo_sefaz || 'Erro desconhecido'))
+      }
+    } catch (err: any) {
+      alert("Erro ao cancelar nota: " + (err.response?.data?.detail || err.message))
+      fetchData()
+    } finally {
+      setCancelling(false)
     }
   }
 
@@ -69,6 +97,44 @@ export default function NotaFiscalDetailPage() {
     window.open(getImageUrl(`/api/v1/notas/${vendaId}/imprimir-a4?token=${token}`), '_blank')
   }
 
+  const getStatusConfig = () => {
+    if (isCanceled) return {
+      bg: 'bg-red-50 border-red-100 dark:bg-red-950/20 dark:border-red-900/30',
+      icon: 'bg-red-500 text-white',
+      Icon: XCircle,
+      title: 'Nota Cancelada',
+    }
+    if (['100', '103', '104'].includes(nota?.status_sefaz || '')) return {
+      bg: 'bg-emerald-50 border-emerald-100 dark:bg-emerald-950/20 dark:border-emerald-900/30',
+      icon: 'bg-emerald-500 text-white',
+      Icon: CheckCircle2,
+      title: 'Nota Emitida',
+    }
+    if (nota?.status_sefaz === 'ERRO') return {
+      bg: 'bg-rose-50 border-rose-100 dark:bg-rose-950/20 dark:border-rose-900/30',
+      icon: 'bg-rose-500 text-white',
+      Icon: XCircle,
+      title: 'Falha na Emissão',
+    }
+    return {
+      bg: 'bg-slate-100 border-slate-200 dark:bg-slate-800/50 dark:border-slate-700',
+      icon: 'bg-slate-400 text-white',
+      Icon: AlertTriangle,
+      title: 'Aguardando Envio',
+    }
+  }
+
+  const MOTIVOS_CANCELAMENTO = [
+    { label: 'Arrependimento do consumidor', value: 'Arrependimento do consumidor' },
+    { label: 'Erro na emissão da nota fiscal', value: 'Erro na emissão da nota fiscal' },
+    { label: 'Venda cancelada pelo cliente', value: 'Venda cancelada pelo cliente' },
+    { label: 'Erro no valor total da venda', value: 'Erro no valor total da venda' },
+    { label: 'Desistência da compra realizada', value: 'Desistência da compra realizada' },
+    { label: 'Erro no CPF/CNPJ do cliente', value: 'Erro no CPF/CNPJ do cliente' },
+    { label: 'Erro de digitação na emissão', value: 'Erro de digitação na emissão' },
+    { label: 'Outro (digitar manualmente)', value: '' },
+  ]
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-900">
@@ -76,6 +142,8 @@ export default function NotaFiscalDetailPage() {
       </div>
     )
   }
+
+  const statusCfg = getStatusConfig()
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900 p-6 md:p-10 font-sans">
@@ -88,45 +156,48 @@ export default function NotaFiscalDetailPage() {
             <p className="text-slate-500 dark:text-slate-400 font-medium text-sm uppercase tracking-widest">Venda #{vendaId}</p>
           </div>
 
-          {nota?.status_sefaz !== '100' && (
-            <button 
-              onClick={handleEmitir}
-              disabled={emitting}
-              className={`px-8 py-4 rounded-2xl font-black text-sm uppercase tracking-widest transition-all shadow-lg flex items-center gap-3 active:scale-95 ${
-                emitting ? 'bg-slate-400 cursor-not-allowed' : 'bg-brand-600 hover:bg-brand-700 text-white'
-              }`}
-            >
-              {emitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCcw className="w-4 h-4" />}
-              Emitir NFC-e Agora
-            </button>
-          )}
+          <div className="flex gap-3">
+            {!isAuthorized && !isCanceled && (
+              <button 
+                onClick={handleEmitir}
+                disabled={emitting}
+                className={`px-8 py-4 rounded-2xl font-black text-sm uppercase tracking-widest transition-all shadow-lg flex items-center gap-3 active:scale-95 ${
+                  emitting ? 'bg-slate-400 cursor-not-allowed' : 'bg-brand-600 hover:bg-brand-700 text-white'
+                }`}
+              >
+                {emitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCcw className="w-4 h-4" />}
+                Emitir NFC-e Agora
+              </button>
+            )}
+            {isAuthorized && !isCanceled && (
+              <button 
+                onClick={() => setShowCancelModal(true)}
+                className="px-8 py-4 rounded-2xl font-black text-sm uppercase tracking-widest transition-all shadow-lg flex items-center gap-3 active:scale-95 bg-red-600 hover:bg-red-700 text-white"
+              >
+                <Ban className="w-4 h-4" />
+                Cancelar NFC-e
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Status Card */}
-        <div className={`p-8 rounded-[2.5rem] border flex flex-col md:flex-row items-center gap-8 shadow-xl ${
-          ['100', '103', '104'].includes(nota?.status_sefaz || '') ? 'bg-emerald-50 border-emerald-100 dark:bg-emerald-950/20 dark:border-emerald-900/30' :
-          nota?.status_sefaz === 'ERRO' ? 'bg-rose-50 border-rose-100 dark:bg-rose-950/20 dark:border-rose-900/30' :
-          'bg-slate-100 border-slate-200 dark:bg-slate-800/50 dark:border-slate-700'
-        }`}>
-          <div className={`w-20 h-20 rounded-3xl flex items-center justify-center shadow-inner ${
-            ['100', '103', '104'].includes(nota?.status_sefaz || '') ? 'bg-emerald-500 text-white' :
-            nota?.status_sefaz === 'ERRO' ? 'bg-rose-500 text-white' :
-            'bg-slate-400 text-white'
-          }`}>
-            {['100', '103', '104'].includes(nota?.status_sefaz || '') ? <CheckCircle2 className="w-10 h-10" /> :
-             nota?.status_sefaz === 'ERRO' ? <XCircle className="w-10 h-10" /> :
-             <AlertTriangle className="w-10 h-10" />}
+        <div className={`p-8 rounded-[2.5rem] border flex flex-col md:flex-row items-center gap-8 shadow-xl ${statusCfg.bg}`}>
+          <div className={`w-20 h-20 rounded-3xl flex items-center justify-center shadow-inner ${statusCfg.icon}`}>
+            <statusCfg.Icon className="w-10 h-10" />
           </div>
           <div className="flex-1 text-center md:text-left">
-            <h2 className="text-2xl font-black text-slate-900 dark:text-white uppercase tracking-tight">
-              {['100', '103', '104'].includes(nota?.status_sefaz || '') ? 'Nota Emitida' : 
-               nota?.status_sefaz === 'ERRO' ? 'Falha na Emissão' : 'Aguardando Envio'}
-            </h2>
+            <h2 className="text-2xl font-black text-slate-900 dark:text-white uppercase tracking-tight">{statusCfg.title}</h2>
             <p className="text-slate-600 dark:text-slate-400 font-medium text-lg leading-tight mt-1">
-              {nota?.motivo_sefaz || 'Sem informações da SEFAZ no momento.'}
+              {isCanceled ? (nota?.motivo_cancelamento || 'Cancelamento homologado') : (nota?.motivo_sefaz || 'Sem informações da SEFAZ no momento.')}
             </p>
+            {isCanceled && nota?.protocolo_cancelamento && (
+              <p className="text-sm font-mono text-slate-500 dark:text-slate-400 mt-2">
+                Protocolo de Cancelamento: {nota.protocolo_cancelamento}
+              </p>
+            )}
             {nota?.chave_acesso && (
-              <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-4 mt-4">
                 <div className="inline-flex items-center gap-2 bg-white dark:bg-slate-800 px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-[10px] font-mono font-bold text-slate-500 uppercase">
                   Chave: {nota.chave_acesso}
                   <button onClick={() => navigator.clipboard.writeText(nota.chave_acesso)} className="hover:text-brand-500"><Clipboard className="w-3 h-3" /></button>
@@ -219,6 +290,70 @@ export default function NotaFiscalDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* Cancel Modal */}
+      {showCancelModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-[2rem] shadow-2xl max-w-lg w-full p-8 space-y-6">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+                <Ban className="w-6 h-6 text-red-600 dark:text-red-400" />
+              </div>
+              <div>
+                <h3 className="text-xl font-black text-slate-900 dark:text-white">Cancelar NFC-e</h3>
+                <p className="text-sm text-slate-500 dark:text-slate-400">Esta ação não pode ser desfeita.</p>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2">
+                Motivo do cancelamento
+              </label>
+              <select
+                onChange={(e) => setJustificativa(e.target.value)}
+                value={MOTIVOS_CANCELAMENTO.some(m => m.value === justificativa) ? justificativa : ''}
+                className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm font-medium focus:ring-2 focus:ring-brand-500 focus:border-transparent outline-none mb-3"
+              >
+                <option value="">Selecione um motivo...</option>
+                {MOTIVOS_CANCELAMENTO.map((m) => (
+                  <option key={m.label} value={m.value}>{m.label}</option>
+                ))}
+              </select>
+              <textarea
+                value={justificativa}
+                onChange={(e) => setJustificativa(e.target.value)}
+                rows={3}
+                maxLength={255}
+                className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm font-medium focus:ring-2 focus:ring-brand-500 focus:border-transparent outline-none resize-none"
+                placeholder="Descreva o motivo do cancelamento..."
+              />
+              <p className="text-xs text-slate-400 mt-1">
+                {justificativa.length}/255
+                {justificativa.length > 0 && justificativa.length < 15 && (
+                  <span className="text-red-500 ml-2">mínimo 15 caracteres</span>
+                )}
+              </p>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => { setShowCancelModal(false); setJustificativa('') }}
+                className="flex-1 px-6 py-3 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-bold text-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition-all"
+              >
+                Voltar
+              </button>
+              <button
+                onClick={handleCancelar}
+                disabled={cancelling || justificativa.trim().length < 15}
+                className="flex-1 px-6 py-3 rounded-xl bg-red-600 hover:bg-red-700 disabled:bg-slate-400 text-white font-bold text-sm transition-all flex items-center justify-center gap-2"
+              >
+                {cancelling ? <Loader2 className="w-4 h-4 animate-spin" /> : <Ban className="w-4 h-4" />}
+                Confirmar Cancelamento
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -59,5 +59,13 @@ export const vendaService = {
   async cancelarVenda(vendaId: number) {
     const res = await api.delete(`/vendas/${vendaId}/cancelar`);
     return res.data;
+  },
+
+  /**
+   * Cancela uma NFC-e autorizada junto a SEFAZ
+   */
+  async cancelarNota(vendaId: number, justificativa: string) {
+    const res = await api.post(`/notas/cancelar/${vendaId}`, { justificativa });
+    return res.data;
   }
 };

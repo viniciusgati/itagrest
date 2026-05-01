@@ -159,6 +159,114 @@ class SefazService:
             db.rollback(); raise e
 
     @staticmethod
+    def cancelar_nfce(db: Session, venda_id: int, justificativa: str):
+        nota = db.query(NotaFiscalModel).filter(NotaFiscalModel.venda_id == venda_id).first()
+        if not nota:
+            raise Exception("Nenhuma nota fiscal encontrada para esta venda.")
+        if nota.status_sefaz != "100":
+            raise Exception("A nota não está autorizada. Apenas notas com status '100' (Autorizado) podem ser canceladas.")
+        if nota.protocolo_cancelamento:
+            raise Exception("Esta nota já foi cancelada.")
+
+        justificativa = justificativa.strip()
+        if len(justificativa) < 15:
+            raise Exception("Justificativa deve ter no mínimo 15 caracteres.")
+
+        empresa = db.query(Empresa).first()
+        db.refresh(empresa)
+
+        chave = nota.chave_acesso
+        protocolo = nota.protocolo
+        tp_evento = "110111"
+        seq = "01"
+        id_evento = f"ID{tp_evento}{chave}{seq}"
+
+        dh_ref = datetime.now(timezone(timedelta(hours=-3)))
+        dh_evento = dh_ref.strftime('%Y-%m-%dT%H:%M:%S-03:00')
+
+        # 1. Monta XML do evento (sem assinatura)
+        evento_xml = (
+            f'<evento xmlns="http://www.portalfiscal.inf.br/nfe" versao="1.00">'
+            f'<infEvento Id="{id_evento}">'
+            f'<cOrgao>35</cOrgao>'
+            f'<tpAmb>{empresa.ambiente}</tpAmb>'
+            f'<CNPJ>{empresa.cnpj}</CNPJ>'
+            f'<chNFe>{chave}</chNFe>'
+            f'<dhEvento>{dh_evento}</dhEvento>'
+            f'<tpEvento>{tp_evento}</tpEvento>'
+            f'<nSeqEvento>1</nSeqEvento>'
+            f'<verEvento>1.00</verEvento>'
+            f'<detEvento versao="1.00">'
+            f'<descEvento>Cancelamento</descEvento>'
+            f'<nProt>{protocolo}</nProt>'
+            f'<xJust>{justificativa}</xJust>'
+            f'</detEvento>'
+            f'</infEvento>'
+            f'</evento>'
+        )
+
+        with open(os.path.join("storage/certs", os.path.basename(empresa.certificado_path)), "rb") as f:
+            pfx_data = f.read()
+        pw = (empresa.certificado_senha or "").strip().encode('utf-8')
+
+        from erpbrasil.assinatura.assinatura import XMLSignerWithSHA1
+        import signxml
+        p12 = pkcs12.load_key_and_certificates(pfx_data, pw, default_backend())
+        pkey, pcert, others = (p12[0], p12[1], p12[2]) if isinstance(p12, tuple) else (p12.key, p12.cert, p12.othercerts)
+
+        root = etree.fromstring(evento_xml.encode('utf-8'))
+        signer = XMLSignerWithSHA1(method=signxml.methods.enveloped, signature_algorithm="rsa-sha1", digest_algorithm="sha1", c14n_algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315")
+        signer.namespaces = {None: signxml.namespaces.ds}
+        signed_root = signer.sign(root, key=pkey, cert=pcert.public_bytes(Encoding.PEM), reference_uri=f"#{id_evento}")
+
+        xml_assinado = etree.tostring(signed_root, encoding='unicode')
+        xml_assinado = xml_assinado.replace(' xmlns="http://www.portalfiscal.inf.br/nfe"', '').replace('<evento', '<evento xmlns="http://www.portalfiscal.inf.br/nfe"', 1)
+        xml_assinado = re.sub(r'<\?xml.*?\?>', '', xml_assinado).strip()
+
+        # 2. Envelopa em envEvento + SOAP
+        url_s = "https://nfce.fazenda.sp.gov.br/ws/NFeRecepcaoEvento4.asmx" if empresa.ambiente == 1 else "https://homologacao.nfce.fazenda.sp.gov.br/ws/NFeRecepcaoEvento4.asmx"
+        lote_id = f"{venda_id}{int(dh_ref.timestamp())}"[-15:]
+        env_evento = f'<envEvento xmlns="http://www.portalfiscal.inf.br/nfe" versao="1.00"><idLote>{lote_id}</idLote>{xml_assinado}</envEvento>'
+        env = (
+            f'<?xml version="1.0" encoding="utf-8"?>'
+            f'<soap12:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap12="http://www.w3.org/2003/05/soap-envelope">'
+            f'<soap12:Body>'
+            f'<nfeDadosMsg xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento4">{env_evento}</nfeDadosMsg>'
+            f'</soap12:Body>'
+            f'</soap12:Envelope>'
+        )
+
+        ct, kt = tempfile.NamedTemporaryFile(delete=False), tempfile.NamedTemporaryFile(delete=False)
+        try:
+            cert_pem = pcert.public_bytes(Encoding.PEM)
+            for ot in others:
+                cert_pem += ot.public_bytes(Encoding.PEM)
+            ct.write(cert_pem); ct.close()
+            kt.write(pkey.private_bytes(Encoding.PEM, PrivateFormat.TraditionalOpenSSL, NoEncryption())); kt.close()
+            res = requests.post(url=url_s, data=env.encode('utf-8'), headers={"Content-Type": "application/soap+xml; charset=utf-8"}, cert=(ct.name, kt.name), verify=False, timeout=30)
+
+            nota.xml_recebido = nota.xml_recebido + "\n\n--- CANCELAMENTO ---\n" + res.text if nota.xml_recebido else res.text
+
+            if "<cStat>135</cStat>" in res.text:
+                n_prot = re.search(r"<nProt>(.*?)</nProt>", res.text)
+                nota.protocolo_cancelamento = n_prot.group(1) if n_prot else "SEM_PROTOCOLO"
+                nota.motivo_cancelamento = "Cancelamento homologado"
+                nota.data_cancelamento = dh_ref
+                nota.status_sefaz = "CANCELADA"
+                db.commit()
+            else:
+                m = re.search(r"<xMotivo>(.*?)</xMotivo>", res.text)
+                nota.status_sefaz = "ERRO"
+                nota.motivo_sefaz = (m.group(1) if m else "Erro no cancelamento") + " (cancelamento)"
+                db.commit()
+                raise Exception(nota.motivo_sefaz)
+        finally:
+            for x in [ct.name, kt.name]:
+                if os.path.exists(x):
+                    os.remove(x)
+        return nota
+
+    @staticmethod
     def gerar_danfe_pdf(db: Session, venda_id: int, largura: int = 80) -> io.BytesIO:
         from reportlab.pdfgen import canvas
         nota = db.query(NotaFiscalModel).filter(NotaFiscalModel.venda_id == venda_id).first()
