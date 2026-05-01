@@ -84,14 +84,17 @@ def emitir_nota(
             motivo_sefaz=str(e)
         )
 
+class CancelamentoRequest(BaseModel):
+    justificativa: str
+
 @router.post("/cancelar/{venda_id}", response_model=NotaFiscalResponse)
 def cancelar_nota(
     venda_id: int,
-    body: dict,
+    body: CancelamentoRequest,
     db: Session = Depends(get_db),
-    current_user: Usuario = Depends(get_current_gerente)
+    current_user: Usuario = get_current_gerente
 ):
-    justificativa = (body.get("justificativa") or "").strip()
+    justificativa = body.justificativa.strip()
     if len(justificativa) < 15:
         raise HTTPException(status_code=400, detail="Justificativa deve ter no mínimo 15 caracteres.")
     try:
