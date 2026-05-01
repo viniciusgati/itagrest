@@ -2,9 +2,89 @@
 
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { RefreshCcw, FileText, Code, CheckCircle2, XCircle, AlertTriangle, Loader2, Clipboard, Printer, File, Share2, Ban } from 'lucide-react'
+import { RefreshCcw, FileText, Code, CheckCircle2, XCircle, AlertTriangle, Loader2, Clipboard, Printer, File, Share2, Ban, Clock, Send, Download, RotateCcw } from 'lucide-react'
 import api, { getImageUrl } from '@/lib/api'
 import { vendaService } from '@/services/venda.service'
+
+function parseEventosSefaz(xmlRecebido: string | null) {
+  if (!xmlRecebido) return []
+  const eventos: { tipo: string; cStat: string; xMotivo: string; nProt?: string; chNFe?: string; dhEvento?: string; isSucesso: boolean }[] = []
+
+  const partes = xmlRecebido.split('--- CANCELAMENTO ---')
+
+  for (const parte of partes) {
+    const limpa = parte.replace(/<\?xml.*?\?>/, '').trim()
+    if (!limpa) continue
+
+    const extract = (tag: string) => {
+      const m = limpa.match(new RegExp(`<${tag}[^>]*>(.*?)</${tag}>`))
+      return m ? m[1].trim() : null
+    }
+
+    const isCancel = limpa.includes('retEnvEvento') || limpa.includes('RecepcaoEvento')
+
+    if (isCancel) {
+      const cStatLote = extract('cStat')
+      const xMotivoLote = extract('xMotivo')
+      const cStatEvento = limpa.match(/<infEvento>[\s\S]*?<cStat>(.*?)<\/cStat>/)?.[1]
+      const xMotivoEvento = limpa.match(/<infEvento>[\s\S]*?<xMotivo>(.*?)<\/xMotivo>/)?.[1]
+      const nProt = limpa.match(/<infEvento>[\s\S]*?<nProt>(.*?)<\/nProt>/)?.[1]
+      const chNFe = extract('chNFe')
+      const dhEvento = limpa.match(/<infEvento>[\s\S]*?<dhRegEvento>(.*?)<\/dhRegEvento>/)?.[1]
+
+      if (cStatLote) eventos.push({
+        tipo: 'Cancelamento (Lote)',
+        cStat: cStatLote,
+        xMotivo: xMotivoLote || '',
+        isSucesso: cStatLote === '128',
+      })
+      if (cStatEvento) eventos.push({
+        tipo: 'Cancelamento',
+        cStat: cStatEvento,
+        xMotivo: xMotivoEvento || '',
+        nProt,
+        chNFe,
+        dhEvento,
+        isSucesso: cStatEvento === '135',
+      })
+    } else {
+      const cStatLote = extract('cStat')
+      const xMotivoLote = extract('xMotivo')
+      const dhRecbto = extract('dhRecbto')
+
+      const infProt = limpa.match(/<infProt>([\s\S]*?)<\/infProt>/)
+      let cStatNfe: string | null = null
+      let xMotivoNfe: string | null = null
+      let nProt: string | null = null
+      let chNFe: string | null = null
+      if (infProt) {
+        cStatNfe = infProt[1].match(/<cStat>(.*?)<\/cStat>/)?.[1] || null
+        xMotivoNfe = infProt[1].match(/<xMotivo>(.*?)<\/xMotivo>/)?.[1] || null
+        nProt = infProt[1].match(/<nProt>(.*?)<\/nProt>/)?.[1] || null
+        chNFe = infProt[1].match(/<chNFe>(.*?)<\/chNFe>/)?.[1] || null
+      }
+
+      if (cStatLote) eventos.push({
+        tipo: 'Autorização (Lote)',
+        cStat: cStatLote,
+        xMotivo: xMotivoLote || '',
+        dhEvento: dhRecbto || undefined,
+        isSucesso: cStatLote === '104',
+      })
+      if (cStatNfe) eventos.push({
+        tipo: 'Autorização',
+        cStat: cStatNfe,
+        xMotivo: xMotivoNfe || '',
+        nProt,
+        chNFe,
+        dhEvento: dhRecbto || undefined,
+        isSucesso: cStatNfe === '100',
+      })
+    }
+  }
+
+  return eventos
+}
 
 export default function NotaFiscalDetailPage() {
   const { vendaId } = useParams()
@@ -237,11 +317,11 @@ export default function NotaFiscalDetailPage() {
           </div>
         </div>
 
-        {/* Auditoria Tabs */}
+        {/* Timeline + Auditoria Tabs */}
         <div className="bg-white dark:bg-slate-800 rounded-[3rem] border border-slate-100 dark:border-slate-700 shadow-2xl overflow-hidden flex flex-col min-h-[500px]">
           <div className="flex border-b border-slate-100 dark:border-slate-700 overflow-x-auto">
             {[
-              { id: 'logs', label: 'Logs', icon: FileText, color: 'text-brand-600' },
+              { id: 'logs', label: 'Comunicações', icon: FileText, color: 'text-brand-600' },
               { id: 'xml_enviado', label: 'XML Envio', icon: Code, color: 'text-blue-600' },
               { id: 'xml_recebido', label: 'XML Recebido', icon: Code, color: 'text-amber-600' },
               { id: 'xml_autorizado', label: 'XML Autorizado', icon: Code, color: 'text-emerald-600' },
@@ -260,9 +340,7 @@ export default function NotaFiscalDetailPage() {
 
           <div className="p-8 flex-1 bg-slate-50/30 dark:bg-slate-900/10 overflow-auto">
             {activeTab === 'logs' ? (
-              <pre className="font-mono text-xs text-slate-600 dark:text-slate-400 leading-relaxed whitespace-pre-wrap">
-                {nota?.logs_transmissao || 'Nenhum log registrado para esta operação.'}
-              </pre>
+              <TimelineLogs nota={nota} />
             ) : (
               <div className="relative group">
                 <button 
@@ -352,6 +430,98 @@ export default function NotaFiscalDetailPage() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function TimelineLogs({ nota }: { nota: any }) {
+  const eventos = parseEventosSefaz(nota?.xml_recebido)
+
+  if (eventos.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-4 py-16 text-slate-400">
+        <Clock className="w-12 h-12" />
+        <p className="font-bold text-sm">Nenhuma comunicação com a SEFAZ ainda.</p>
+      </div>
+    )
+  }
+
+  const cStatLabel = (code: string) => {
+    const labels: Record<string, string> = {
+      '100': 'Autorizado',
+      '104': 'Lote Processado',
+      '128': 'Lote de Evento Processado',
+      '135': 'Evento Registrado',
+    }
+    return labels[code] || code
+  }
+
+  return (
+    <div className="space-y-4">
+      {nota?.xml_enviado && (
+        <div className="flex items-start gap-4 p-4 bg-blue-50/50 dark:bg-blue-950/10 rounded-2xl border border-blue-100/50 dark:border-blue-900/20">
+          <div className="w-10 h-10 rounded-xl bg-blue-500 text-white flex items-center justify-center shrink-0">
+            <Send className="w-5 h-5" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-xs font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest">XML Enviado para SEFAZ</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 font-mono">
+              Modelo 65 | NFC-e
+            </p>
+          </div>
+        </div>
+      )}
+
+      {eventos.map((ev, i) => (
+        <div key={i} className={`flex items-start gap-4 p-4 rounded-2xl border ${
+          ev.isSucesso
+            ? 'bg-emerald-50/50 dark:bg-emerald-950/10 border-emerald-100/50 dark:border-emerald-900/20'
+            : 'bg-rose-50/50 dark:bg-rose-950/10 border-rose-100/50 dark:border-rose-900/20'
+        }`}>
+          <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+            ev.isSucesso ? 'bg-emerald-500' : 'bg-rose-500'
+          } text-white`}>
+            {ev.isSucesso ? <CheckCircle2 className="w-5 h-5" /> : <XCircle className="w-5 h-5" />}
+          </div>
+          <div className="min-w-0 space-y-1.5">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-widest">{ev.tipo}</span>
+              <span className={`text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider ${
+                ev.isSucesso
+                  ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300'
+                  : 'bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300'
+              }`}>
+                cStat {ev.cStat} — {cStatLabel(ev.cStat)}
+              </span>
+            </div>
+
+            <p className="text-sm font-bold text-slate-700 dark:text-slate-300">{ev.xMotivo}</p>
+
+            <div className="flex flex-wrap gap-x-6 gap-y-1 text-[11px] font-mono text-slate-500 dark:text-slate-400">
+              {ev.nProt && (
+                <span><span className="font-black text-slate-400 dark:text-slate-500">Protocolo:</span> {ev.nProt}</span>
+              )}
+              {ev.chNFe && (
+                <span><span className="font-black text-slate-400 dark:text-slate-500">Chave:</span> {ev.chNFe}</span>
+              )}
+              {ev.dhEvento && (
+                <span><span className="font-black text-slate-400 dark:text-slate-500">Data:</span> {ev.dhEvento}</span>
+              )}
+            </div>
+          </div>
+        </div>
+      ))}
+
+      {eventos.some(e => !e.isSucesso) && (
+        <div className="mt-6 p-4 bg-amber-50/50 dark:bg-amber-950/10 rounded-2xl border border-amber-200/50 dark:border-amber-900/30">
+          <p className="text-xs font-black text-amber-700 dark:text-amber-400 uppercase tracking-widest">
+            ⚠ Atenção
+          </p>
+          <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
+            Esta nota possui rejeições ou erros. Verifique os motivos acima e corrija antes de reemitir.
+          </p>
         </div>
       )}
     </div>
