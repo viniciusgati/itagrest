@@ -2,7 +2,7 @@ import os, io, binascii, re, hashlib, tempfile, requests
 os.environ["OPENSSL_CONF"] = "/app/openssl_legacy.cnf"
 from lxml import etree
 from sqlalchemy.orm import Session, joinedload
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from cryptography.hazmat.primitives.serialization import pkcs12, Encoding, PrivateFormat, NoEncryption
 from cryptography.hazmat.backends import default_backend
 from app.models.venda import Venda, VendaItem
@@ -101,7 +101,8 @@ class SefazService:
         
         try:
             numero_nf = (empresa.ultimo_numero_nf or 0) + 1
-            chave_base = f"35{datetime.now().strftime('%y%m')}{empresa.cnpj.zfill(14)}65001{str(numero_nf).zfill(9)}1{str(numero_nf).zfill(8)}"
+            dh_ref = datetime.now(timezone(timedelta(hours=-3)))
+            chave_base = f"35{dh_ref.strftime('%y%m')}{empresa.cnpj.zfill(14)}65001{str(numero_nf).zfill(9)}1{str(numero_nf).zfill(8)}"
             dv = SefazService.calcular_dv(chave_base); chave = chave_base + str(dv)
             
             with open(os.path.join("storage/certs", os.path.basename(empresa.certificado_path)), "rb") as f: pfx_data = f.read()

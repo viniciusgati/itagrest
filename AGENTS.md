@@ -1,65 +1,54 @@
-# AGENTS.md - Synkra AIOX (Codex CLI)
+# AGENTS.md
 
-Este arquivo define as instrucoes do projeto para o Codex CLI.
+## Stack
+- **Backend**: Python 3.12+ / FastAPI / SQLAlchemy / Alembic / PostgreSQL (prod) / SQLite (dev/test)
+- **Frontend**: Next.js 14 App Router / Tailwind CSS / TypeScript / lucide-react / framer-motion / recharts
+- **Fiscal**: erpbrasil.assinatura, erpbrasil.edoc, nfelib, brazilfiscalreport, reportlab
 
-<!-- AIOX-MANAGED-START: core -->
-## Core Rules
+## Commands
+```sh
+# Backend
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8001            # dev server
+python -m pytest tests/integration/test_auth_register.py -x -v   # focused tests
 
-1. Siga a Constitution em `.aiox-core/constitution.md`
-2. Priorize `CLI First -> Observability Second -> UI Third`
-3. Trabalhe por stories em `docs/stories/`
-4. Nao invente requisitos fora dos artefatos existentes
-<!-- AIOX-MANAGED-END: core -->
+# Frontend (frontend/ directory)
+npm run dev           # next dev server (port 3000)
+npx next build        # typecheck + build (no ESLint configured)
+```
 
-<!-- AIOX-MANAGED-START: quality -->
-## Quality Gates
+## Architecture
+- **Backend entry**: `app/main.py` — mounts routers at `/api/v1/{setup,auth,empresa,produtos,clientes,vendas,notas}`
+- **Frontend entry**: `frontend/src/app/layout.tsx` — wraps all pages with Sidebar + AuthGuard
+- **Auth**: JWT in `Authorization: Bearer` header. Roles: `GERENTE`, `GARCOM`. See `app/api/v1/deps.py`
+- **DB migrations**: `alembic upgrade head` (auto-run on startup via entrypoint.sh)
+- **Models** in `app/models/`, **schemas** in `app/schemas/`, **services** in `app/services/`
 
-- Rode `npm run lint`
-- Rode `npm run typecheck`
-- Rode `npm test`
-- Atualize checklist e file list da story antes de concluir
-<!-- AIOX-MANAGED-END: quality -->
+## Auth & Security Rules
+- Public routes only: `GET /`, `GET /setup/status`, `POST /setup/setup-admin`
+- Login rate-limited: 10/min per IP (slowapi)
+- Product create/update/delete → GERENTE only
+- Client create/edit → any authenticated user; delete → GERENTE only
+- Cancel sale → GERENTE only
+- Print routes (`/notas/{id}/imprimir`, `/imprimir-a4`) accept token via `?token=` query param for new-tab opening
+- All other routes: header `Authorization: Bearer` only
+- NFe already authorized cannot be re-emitted (protected in backend + frontend)
 
-<!-- AIOX-MANAGED-START: codebase -->
-## Project Map
+## Key Conventions
+- **DB fallback**: SQLite (`test.db`) if no `DATABASE_URL` env set; Postgres in prod/homolog
+- **SECRET_KEY** must be ≥16 chars or server crashes on startup
+- **Upload limits**: images 5MB (MIME-validated), XML 10MB, PFX 1MB (only latest kept)
+- **CNPJ card import**: extracts data from PDF via `pdftotext` (requires `poppler-utils` in Docker)
+- **Dark mode**: most pages support `dark:` classes; wizard-fiscal and notas were recently fixed
 
-- Core framework: `.aiox-core/`
-- CLI entrypoints: `bin/`
-- Shared packages: `packages/`
-- Tests: `tests/`
-- Docs: `docs/`
-<!-- AIOX-MANAGED-END: codebase -->
+## Testing Quirks
+- `test_cliente_persistencia` is known-broken (pre-existing auth issue)
+- Tests use SQLite at `test.db` — force with `APP_ENV=test`
+- Fixtures in `tests/conftest.py` recreate tables per module
 
-<!-- AIOX-MANAGED-START: commands -->
-## Common Commands
-
-- `npm run sync:ide`
-- `npm run sync:ide:check`
-- `npm run sync:skills:codex`
-- `npm run sync:skills:codex:global` (opcional; neste repo o padrao e local-first)
-- `npm run validate:structure`
-- `npm run validate:agents`
-<!-- AIOX-MANAGED-END: commands -->
-
-<!-- AIOX-MANAGED-START: shortcuts -->
-## Agent Shortcuts
-
-Preferencia de ativacao no Codex CLI:
-1. Use `/skills` e selecione `aiox-<agent-id>` vindo de `.codex/skills` (ex.: `aiox-architect`)
-2. Se preferir, use os atalhos abaixo (`@architect`, `/architect`, etc.)
-
-Interprete os atalhos abaixo carregando o arquivo correspondente em `.aiox-core/development/agents/` (fallback: `.codex/agents/`), renderize o greeting via `generate-greeting.js` e assuma a persona ate `*exit`:
-
-- `@architect`, `/architect`, `/architect.md` -> `.aiox-core/development/agents/architect.md`
-- `@dev`, `/dev`, `/dev.md` -> `.aiox-core/development/agents/dev.md`
-- `@qa`, `/qa`, `/qa.md` -> `.aiox-core/development/agents/qa.md`
-- `@pm`, `/pm`, `/pm.md` -> `.aiox-core/development/agents/pm.md`
-- `@po`, `/po`, `/po.md` -> `.aiox-core/development/agents/po.md`
-- `@sm`, `/sm`, `/sm.md` -> `.aiox-core/development/agents/sm.md`
-- `@analyst`, `/analyst`, `/analyst.md` -> `.aiox-core/development/agents/analyst.md`
-- `@devops`, `/devops`, `/devops.md` -> `.aiox-core/development/agents/devops.md`
-- `@data-engineer`, `/data-engineer`, `/data-engineer.md` -> `.aiox-core/development/agents/data-engineer.md`
-- `@ux-design-expert`, `/ux-design-expert`, `/ux-design-expert.md` -> `.aiox-core/development/agents/ux-design-expert.md`
-- `@squad-creator`, `/squad-creator`, `/squad-creator.md` -> `.aiox-core/development/agents/squad-creator.md`
-- `@aiox-master`, `/aiox-master`, `/aiox-master.md` -> `.aiox-core/development/agents/aiox-master.md`
-<!-- AIOX-MANAGED-END: shortcuts -->
+## Docker
+```sh
+docker-compose up --build -d   # full stack (db:5433, backend:8001, frontend:3001)
+```
+- Backend Dockerfile at repo root; frontend at `frontend/Dockerfile`
+- Prod: Railway deployment with `poppler-utils` in Dockerfile for pdftotext
