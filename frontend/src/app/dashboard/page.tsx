@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { TrendingUp, Users, DollarSign, Package, ArrowUpRight, ArrowDownRight, ShieldCheck, UtensilsCrossed, Sun, Moon, Loader2 } from 'lucide-react'
+import { TrendingUp, Users, DollarSign, Package, ArrowUpRight, ArrowDownRight, ShieldCheck, UtensilsCrossed, Sun, Moon, Loader2, Eye, EyeOff } from 'lucide-react'
 import api from '@/lib/api'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell } from 'recharts'
 import Link from 'next/link'
@@ -16,12 +16,18 @@ export default function DashboardPage() {
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [empresaConfigurada, setEmpresaConfigurada] = useState(true)
   const [dias, setDias] = useState(7)
+  const [papel, setPapel] = useState<string | null>(null)
+
+  const isGerente = papel === 'GERENTE'
 
   const fetchData = async (periodo: number) => {
     setIsRefreshing(true)
     try {
       const resStatus = await api.get('/empresa/status')
       setEmpresaConfigurada(resStatus.data.configurado)
+
+      const resMe = await api.get('/auth/me')
+      setPapel(resMe.data.papel)
 
       const [resResumo, resFat, resTop] = await Promise.all([
         api.get(`/vendas/stats/resumo?dias=${periodo}`),
@@ -44,13 +50,19 @@ export default function DashboardPage() {
 
   const formatPeriodo = (val: string) => {
     if (dias > 30) {
-      // YYYY-MM -> MM/YY
       const [year, month] = val.split('-')
       return `${month}/${year.slice(2)}`
     }
-    // YYYY-MM-DD -> DD/MM
     const parts = val.split('-')
     return `${parts[2]}/${parts[1]}`
+  }
+
+  const maskVal = (val: any) => isGerente ? val : '***'
+  const maskMoney = (val: any) => isGerente ? `R$ ${Number(val || 0).toFixed(2)}` : 'R$ ***'
+
+  const formatTrend = (val: number | null | undefined) => {
+    if (val == null) return null
+    return `${val >= 0 ? '+' : ''}${val.toFixed(1)}%`
   }
 
   if (loading) return (
@@ -105,6 +117,11 @@ export default function DashboardPage() {
           </div>
           
           <div className="flex items-center gap-4">
+            {!isGerente && (
+              <div className="flex items-center gap-2 px-4 py-2 bg-amber-50 dark:bg-amber-900/20 rounded-2xl text-[10px] font-black text-amber-600 dark:text-amber-400 uppercase tracking-widest">
+                <EyeOff className="w-3 h-3" /> Valores ocultos
+              </div>
+            )}
             {isRefreshing && <Loader2 className="w-5 h-5 text-brand-500 animate-spin" />}
             
             <button 
@@ -168,22 +185,22 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           <StatCard 
             title={`Faturamento (${dias > 30 ? '1 Ano' : `${dias}D`})`} 
-            value={`R$ ${resumo?.total_faturado?.toFixed(2) || '0,00'}`} 
-            trend="+12.5%"
+            value={maskMoney(resumo?.total_faturado)} 
+            trend={formatTrend(resumo?.variacao_faturamento)}
             icon={<DollarSign className="w-6 h-6" />}
             color="bg-emerald-500"
           />
           <StatCard 
             title="Vendas Realizadas" 
-            value={resumo?.qtd_vendas || 0} 
-            trend="+5.2%"
+            value={maskVal(resumo?.qtd_vendas)} 
+            trend={formatTrend(resumo?.variacao_qtd)}
             icon={<Users className="w-6 h-6" />}
             color="bg-brand-500"
           />
           <StatCard 
             title="Ticket Médio" 
-            value={`R$ ${resumo?.ticket_medio?.toFixed(2) || '0,00'}`} 
-            trend="-2.1%"
+            value={maskMoney(resumo?.ticket_medio)} 
+            trend={formatTrend(resumo?.variacao_ticket)}
             icon={<TrendingUp className="w-6 h-6" />}
             color="bg-violet-500"
           />
@@ -216,11 +233,17 @@ export default function DashboardPage() {
                     dy={10} 
                     tickFormatter={formatPeriodo}
                   />
-                  <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 10, fontWeight: 700}} />
+                  <YAxis 
+                    axisLine={false} 
+                    tickLine={false} 
+                    tick={{fill: '#94a3b8', fontSize: 10, fontWeight: 700}} 
+                    tickFormatter={(v: number) => isGerente ? `R$${v}` : ''}
+                  />
                   <Tooltip 
                     contentStyle={{ borderRadius: '20px', border: 'none', boxShadow: '0 20px 50px rgba(0,0,0,0.1)', padding: '15px' }}
                     itemStyle={{ fontWeight: 800, color: '#1e293b' }}
                     labelFormatter={formatPeriodo}
+                    formatter={(value: number) => isGerente ? [`R$ ${value.toFixed(2)}`, 'Total'] : ['R$ ***', 'Total']}
                   />
                   <Area type="monotone" dataKey="total" stroke="#6b8ef9" strokeWidth={4} fillOpacity={1} fill="url(#colorTotal)" />
                 </AreaChart>
@@ -235,13 +258,13 @@ export default function DashboardPage() {
               <Package className="text-brand-500 w-6 h-6" />
             </div>
             <div className="space-y-6">
-              {topProdutos.map((p, i) => (
+              {topProdutos.map((p: any, i: number) => (
                 <div key={i} className="flex items-center justify-between group">
                   <div className="flex items-center gap-4">
                     <span className="text-2xl font-black text-slate-200 dark:text-slate-700 group-hover:text-brand-500 transition-colors">0{i+1}</span>
                     <div>
                       <p className="font-bold text-sm leading-tight">{p.produto}</p>
-                      <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">{p.qtd} unidades</p>
+                      <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">{isGerente ? `${p.qtd} unidades` : '** un'}</p>
                     </div>
                   </div>
                   <div className="h-1.5 w-16 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
@@ -250,7 +273,6 @@ export default function DashboardPage() {
                 </div>
               ))}
             </div>
-            <button className="mt-auto w-full py-4 bg-slate-50 dark:bg-slate-700/50 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] transition-all">Ver Relatório Completo</button>
           </div>
         </div>
       </div>
@@ -259,16 +281,19 @@ export default function DashboardPage() {
 }
 
 function StatCard({ title, value, icon, color, trend }: any) {
-  const isPositive = trend.startsWith('+')
   return (
     <div className="bg-white dark:bg-slate-800 p-8 rounded-[2.5rem] shadow-xl shadow-slate-200/40 dark:shadow-none border border-slate-100 dark:border-slate-700 flex items-center justify-between group hover:border-brand-200 transition-all">
       <div className="space-y-2">
         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{title}</p>
         <h4 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">{value}</h4>
-        <div className={`flex items-center gap-1 text-[10px] font-black uppercase ${isPositive ? 'text-emerald-500' : 'text-rose-500'}`}>
-          {isPositive ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
-          {trend} este mês
-        </div>
+        {trend != null && (
+          <div className={`flex items-center gap-1 text-[10px] font-black uppercase ${
+            trend.startsWith('+') ? 'text-emerald-500' : trend.startsWith('-') ? 'text-rose-500' : 'text-slate-400'
+          }`}>
+            {trend.startsWith('+') ? <ArrowUpRight className="w-3 h-3" /> : trend.startsWith('-') ? <ArrowDownRight className="w-3 h-3" /> : null}
+            {trend} este mês
+          </div>
+        )}
       </div>
       <div className={`w-16 h-16 ${color} rounded-3xl flex items-center justify-center text-white shadow-lg group-hover:scale-110 transition-transform`}>
         {icon}

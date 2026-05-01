@@ -2,7 +2,6 @@ import os
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import func
 from typing import List, Optional
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -13,7 +12,8 @@ from app.models.cliente import Cliente as ClienteModel
 from app.schemas.venda import Venda as VendaSchema, VendaCreate, VendaUpdate, VendaItemCreate, VendaItemUpdate, MesaStatus
 
 from app.models.usuario import Usuario, PapelUsuario
-from app.api.v1.deps import get_current_gerente, get_current_user
+from app.api.v1.deps import get_current_user
+from app.services import vendas_stats
 
 router = APIRouter()
 
@@ -242,7 +242,7 @@ def fechar_venda(
 def cancelar_venda(
     venda_id: int, 
     db: Session = Depends(get_db),
-    current_user: Usuario = get_current_gerente
+    current_user: Usuario = Depends(get_current_user)
 ):
     venda = db.query(VendaModel).filter(VendaModel.id == venda_id).first()
     if not venda or venda.status == StatusVenda.PAGA:
@@ -271,67 +271,27 @@ def cancelar_item(
 def get_venda_resumo(
     dias: int = 7, 
     db: Session = Depends(get_db),
-    current_user: Usuario = get_current_gerente
+    current_user: Usuario = Depends(get_current_user)
 ):
-    # Data de início baseada no filtro
-    inicio = datetime.utcnow() - timedelta(days=dias)
-    vendas = db.query(VendaModel).filter(
-        VendaModel.data_abertura >= inicio, 
-        VendaModel.status == StatusVenda.PAGA
-    ).all()
-    
-    total = sum(v.total for v in vendas)
-    qtd = len(vendas)
-    return {
-        "total_faturado": total, 
-        "qtd_vendas": qtd, 
-        "ticket_medio": total/qtd if qtd > 0 else 0
-    }
+    res = vendas_stats.calcular_resumo(db, dias)
+    if current_user.papel == PapelUsuario.GARCOM:
+        res["total_faturado"] = None
+        res["qtd_vendas"] = None
+        res["ticket_medio"] = None
+    return res
 
 @router.get("/stats/faturamento-periodo")
 def get_faturamento_periodo(
     dias: int = 7, 
     db: Session = Depends(get_db),
-    current_user: Usuario = get_current_gerente
+    current_user: Usuario = Depends(get_current_user)
 ):
-    """Retorna o faturamento agrupado por dia ou mês dependendo do período."""
-    inicio = datetime.utcnow() - timedelta(days=dias)
-    
-    if dias > 30:
-        # Agrupamento mensal para períodos longos (1 ano)
-        # strftime ou date_trunc dependendo do banco. Para Postgres:
-        res = db.query(
-            func.to_char(VendaModel.data_abertura, 'YYYY-MM').label('periodo'), 
-            func.sum(VendaModel.total).label('total')
-        ).filter(
-            VendaModel.data_abertura >= inicio, 
-            VendaModel.status == StatusVenda.PAGA
-        ).group_by('periodo').order_by('periodo').all()
-    else:
-        # Agrupamento diário
-        res = db.query(
-            func.date(VendaModel.data_abertura).label('periodo'), 
-            func.sum(VendaModel.total).label('total')
-        ).filter(
-            VendaModel.data_abertura >= inicio, 
-            VendaModel.status == StatusVenda.PAGA
-        ).group_by('periodo').order_by('periodo').all()
-        
-    return [{"periodo": str(r.periodo), "total": float(r.total)} for r in res]
+    return vendas_stats.calcular_faturamento_periodo(db, dias)
 
 @router.get("/stats/top-produtos")
 def get_top_produtos(
     dias: int = 7, 
     db: Session = Depends(get_db),
-    current_user: Usuario = get_current_gerente
+    current_user: Usuario = Depends(get_current_user)
 ):
-    inicio = datetime.utcnow() - timedelta(days=dias)
-    res = db.query(
-        ProdutoModel.descricao, 
-        func.sum(VendaItemModel.quantidade).label('qtd')
-    ).join(VendaItemModel).join(VendaModel).filter(
-        VendaModel.data_abertura >= inicio,
-        VendaModel.status == StatusVenda.PAGA
-    ).group_by(ProdutoModel.id).order_by(func.sum(VendaItemModel.quantidade).desc()).limit(5).all()
-    
-    return [{"produto": r.descricao, "qtd": int(r.qtd)} for r in res]
+    return vendas_stats.calcular_top_produtos(db, dias)

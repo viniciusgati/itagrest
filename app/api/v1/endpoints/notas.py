@@ -92,7 +92,7 @@ def cancelar_nota(
     venda_id: int,
     body: CancelamentoRequest,
     db: Session = Depends(get_db),
-    current_user: Usuario = get_current_gerente
+    current_user: Usuario = Depends(get_current_user)
 ):
     justificativa = body.justificativa.strip()
     if len(justificativa) < 15:

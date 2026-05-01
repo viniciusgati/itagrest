@@ -29,8 +29,9 @@ npx next build        # typecheck + build (no ESLint configured)
 - Login rate-limited: 10/min per IP (slowapi)
 - Product create/update/delete → GERENTE only
 - Client create/edit → any authenticated user; delete → GERENTE only
-- Cancel sale → GERENTE only
-- Cancel NFe → GERENTE only (justificativa mín. 15 caracteres)
+- Cancel sale → any authenticated user
+- Cancel NFe → any authenticated user (justificativa mín. 15 caracteres)
+- Dashboard stats → any authenticated user; GARÇOM sees only percentages (values masked)
 - Print routes (`/notas/{id}/imprimir`, `/imprimir-a4`) accept token via `?token=` query param for new-tab opening
 - All other routes: header `Authorization: Bearer` only
 - NFe already authorized cannot be re-emitted (protected in backend + frontend)
