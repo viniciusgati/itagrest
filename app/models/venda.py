@@ -12,6 +12,9 @@ class StatusVenda(str, enum.Enum):
 
 class FormaPagamento(str, enum.Enum):
     DINHEIRO = "DINHEIRO"
+    PIX = "PIX"
+    CARTAO_CREDITO = "CARTAO_CREDITO"
+    CARTAO_DEBITO = "CARTAO_DEBITO"
 
 class Venda(Base):
     """

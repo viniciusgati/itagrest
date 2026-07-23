@@ -58,7 +58,9 @@ class SefazService:
         xml += '<transp><modFrete>9</modFrete></transp>'
         
         # 4. PAGAMENTO
-        xml += f'<pag><detPag><tPag>01</tPag><vPag>{total_xml:.2f}</vPag></detPag></pag>'
+        tpag_map = {"DINHEIRO": "01", "CARTAO_CREDITO": "03", "CARTAO_DEBITO": "04", "PIX": "17"}
+        tpag = tpag_map.get(venda.forma_pagamento.value if venda.forma_pagamento else "", "01")
+        xml += f'<pag><detPag><tPag>{tpag}</tPag><vPag>{total_xml:.2f}</vPag></detPag></pag>'
 
         # 5. INFORMAÇÕES ADICIONAIS (Sanitizado Profissionalmente)
         if empresa.observacoes_nf:

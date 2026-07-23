@@ -13,6 +13,9 @@ class StatusVenda(str, Enum):
 
 class FormaPagamento(str, Enum):
     DINHEIRO = "DINHEIRO"
+    PIX = "PIX"
+    CARTAO_CREDITO = "CARTAO_CREDITO"
+    CARTAO_DEBITO = "CARTAO_DEBITO"
 
 # --- Schemas para Itens ---
 

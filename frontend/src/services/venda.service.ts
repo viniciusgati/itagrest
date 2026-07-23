@@ -8,7 +8,7 @@ export interface VendaItemCreate {
 
 export interface FaturarVendaPayload {
   status: 'PAGA' | 'CANCELADA';
-  forma_pagamento: 'DINHEIRO';
+  forma_pagamento: 'DINHEIRO' | 'PIX' | 'CARTAO_CREDITO' | 'CARTAO_DEBITO';
   cliente_id?: number;
 }
 

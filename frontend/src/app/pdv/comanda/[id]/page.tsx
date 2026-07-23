@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { 
   ArrowLeft, Search, Plus, Trash2, Pencil,
   CreditCard, X, Check, Loader2, DollarSign, 
-  QrCode, Utensils, ShoppingBag, User, UserPlus, Printer, FileText
+  QrCode, Utensils, ShoppingBag, User, UserPlus, Printer, FileText, Smartphone
 } from 'lucide-react'
 import api, { getImageUrl } from '@/lib/api'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -228,21 +228,16 @@ export default function ComandaMobilePage() {
     setIsEmitting(true)
     setError('')
     try {
-      // 1. Primeiro garante o fechamento da venda no banco (independente da nota)
+      // 1. Primeiro fecha a venda no banco
       const res = await api.put(`/vendas/${venda.id}/fechar`, {
         forma_pagamento: forma,
-        status: forma === 'PIX' ? 'AGUARDANDO_PAGAMENTO' : 'PAGA'
+        status: 'PAGA'
       })
       setVenda(res.data)
       
-      // 2. Tenta emitir a nota se for dinheiro (fluxo automático)
-      if (forma === 'DINHEIRO') {
-        const resNota = await api.post(`/notas/emitir/${venda.id}`)
-        setFiscalStatus(resNota.data)
-      } else {
-        // Se for PIX ou outro, apenas fecha o modal e volta pro mapa
-        router.push('/pdv')
-      }
+      // 2. Emite a nota fiscal
+      const resNota = await api.post(`/notas/emitir/${venda.id}`)
+      setFiscalStatus(resNota.data)
     } catch (err: any) {
       console.error("Erro no fechamento:", err)
       const detail = err.response?.data?.detail
@@ -499,7 +494,9 @@ export default function ComandaMobilePage() {
                     <span className="text-2xl font-black text-slate-900 dark:text-white tracking-tighter">R$ {parseFloat(venda?.total || "0").toFixed(2)}</span>
                   </div>
                   <div className="grid grid-cols-1 gap-4">
-                    <button onClick={() => handleFecharMesa('DINHEIRO')} className="h-28 bg-emerald-600 text-white rounded-[2.5rem] flex items-center justify-center gap-6 font-black uppercase shadow-lg active:scale-95 transition-transform"><DollarSign className="w-8 h-8" /> Dinheiro</button>
+                    <button onClick={() => handleFecharMesa('DINHEIRO')} className="h-24 bg-emerald-600 text-white rounded-[2.5rem] flex items-center justify-center gap-6 font-black uppercase shadow-lg active:scale-95 transition-transform"><DollarSign className="w-8 h-8" /> Dinheiro</button>
+                    <button onClick={() => handleFecharMesa('CARTAO_CREDITO')} className="h-24 bg-blue-600 text-white rounded-[2.5rem] flex items-center justify-center gap-6 font-black uppercase shadow-lg active:scale-95 transition-transform"><CreditCard className="w-8 h-8" /> Crédito</button>
+                    <button onClick={() => handleFecharMesa('CARTAO_DEBITO')} className="h-24 bg-sky-600 text-white rounded-[2.5rem] flex items-center justify-center gap-6 font-black uppercase shadow-lg active:scale-95 transition-transform"><Smartphone className="w-8 h-8" /> Débito</button>
                     <button onClick={() => handleFecharMesa('PIX')} className="h-24 bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-white rounded-[2.5rem] flex items-center justify-center gap-4 font-black uppercase active:scale-95 transition-transform"><QrCode className="w-6 h-6 text-brand-600" /> PIX</button>
                   </div>
                   <button onClick={() => setCheckoutStep('summary')} className="w-full py-2 text-slate-400 font-bold text-[10px] uppercase tracking-widest">Voltar ao Resumo</button>

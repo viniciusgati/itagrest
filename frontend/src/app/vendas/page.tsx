@@ -175,7 +175,7 @@ function ActionButton({ onClick, icon, label, color }: { onClick: () => void; ic
 function StatusBadge({ status }: { status: string }) {
   const configs: any = {
     'PAGA': { icon: <CheckCircle2 className="w-3 h-3" />, color: 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600', label: 'Finalizada' },
-    'AGUARDANDO_PAGAMENTO': { icon: <Clock className="w-3 h-3" />, color: 'bg-amber-50 dark:bg-amber-900/20 text-amber-600', label: 'Aguardando PIX' },
+    'AGUARDANDO_PAGAMENTO': { icon: <Clock className="w-3 h-3" />, color: 'bg-amber-50 dark:bg-amber-900/20 text-amber-600', label: 'Aguardando' },
     'ABERTA': { icon: <Clock className="w-3 h-3" />, color: 'bg-blue-50 dark:bg-blue-900/20 text-blue-600', label: 'Em Atendimento' },
     'CANCELADA': { icon: <XCircle className="w-3 h-3" />, color: 'bg-rose-50 dark:bg-rose-900/20 text-rose-600', label: 'Cancelada' },
   }
