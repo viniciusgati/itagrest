@@ -59,8 +59,12 @@ class SefazService:
         
         # 4. PAGAMENTO
         tpag_map = {"DINHEIRO": "01", "CARTAO_CREDITO": "99", "CARTAO_DEBITO": "99", "PIX": "17"}
-        tpag = tpag_map.get(venda.forma_pagamento.value if venda.forma_pagamento else "", "01")
-        xml += f'<pag><detPag><tPag>{tpag}</tPag><vPag>{total_xml:.2f}</vPag></detPag></pag>'
+        forma = venda.forma_pagamento.value if venda.forma_pagamento else ""
+        tpag = tpag_map.get(forma, "01")
+        xpag_map = {"CARTAO_CREDITO": "Cartão de Crédito", "CARTAO_DEBITO": "Cartão de Débito"}
+        xpag = xpag_map.get(forma, "")
+        xpag_xml = f'<xPag>{xpag}</xPag>' if xpag else ""
+        xml += f'<pag><detPag><tPag>{tpag}</tPag>{xpag_xml}<vPag>{total_xml:.2f}</vPag></detPag></pag>'
 
         # 5. INFORMAÇÕES ADICIONAIS (Sanitizado Profissionalmente)
         if empresa.observacoes_nf:
