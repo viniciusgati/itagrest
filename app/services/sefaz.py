@@ -12,6 +12,40 @@ from app.core.logging import logger
 
 class SefazService:
     @staticmethod
+    def validar_cpf_cnpj(doc: str):
+        """Retorna (tipo, doc_limpo) onde tipo = 'CPF' ou 'CNPJ', ou (None, None) se invalido."""
+        if not doc:
+            return None, None
+        doc = re.sub(r'[^0-9]', '', doc)
+        if len(doc) == 11:
+            # valida CPF
+            def dv_cpf(nums, mult):
+                s = sum(int(d) * w for d, w in zip(nums, range(mult, 1, -1)))
+                r = (s * 10) % 11
+                return 0 if r == 10 else r
+            if doc == doc[0] * 11:
+                return None, None
+            if dv_cpf(doc[:9], 10) != int(doc[9]):
+                return None, None
+            if dv_cpf(doc[:10], 11) != int(doc[10]):
+                return None, None
+            return 'CPF', doc
+        elif len(doc) == 14:
+            # valida CNPJ
+            def dv_cnpj(nums, pesos):
+                s = sum(int(d) * p for d, p in zip(nums, pesos))
+                r = s % 11
+                return 0 if r < 2 else 11 - r
+            pesos1 = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
+            pesos2 = [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
+            if dv_cnpj(doc[:12], pesos1) != int(doc[12]):
+                return None, None
+            if dv_cnpj(doc[:13], pesos2) != int(doc[13]):
+                return None, None
+            return 'CNPJ', doc
+        return None, None
+
+    @staticmethod
     def calcular_dv(chave_43):
         pesos = [2, 3, 4, 5, 6, 7, 8, 9]
         soma = 0
@@ -42,8 +76,11 @@ class SefazService:
         xml += f'<emit><CNPJ>{empresa.cnpj}</CNPJ><xNome>{escape(empresa.razao_social)}</xNome><enderEmit><xLgr>{escape(empresa.logradouro or "RUA")}</xLgr><nro>{escape(empresa.numero or "SN")}</nro><xBairro>{escape(empresa.bairro or "BAIRRO")}</xBairro><cMun>{ibge}</cMun><xMun>{escape(empresa.municipio_nome or "CIDADE")}</xMun><UF>{empresa.uf or "SP"}</UF><CEP>{empresa.cep or "01000000"}</CEP><cPais>1058</cPais><xPais>BRASIL</xPais></enderEmit><IE>{empresa.inscricao_estadual}</IE><CRT>1</CRT></emit>'
         
         if venda.cliente:
-            tag = "CNPJ" if len(venda.cliente.documento) > 11 else "CPF"
-            xml += f'<dest><{tag}>{venda.cliente.documento}</{tag}><xNome>{escape(venda.cliente.nome[:60])}</xNome><indIEDest>9</indIEDest></dest>'
+            tipo, doc = SefazService.validar_cpf_cnpj(venda.cliente.documento)
+            if tipo and doc:
+                xml += f'<dest><{tipo}>{doc}</{tipo}><xNome>{escape(venda.cliente.nome[:60])}</xNome><indIEDest>9</indIEDest></dest>'
+            else:
+                logger.warning(f"Documento invalido para cliente da venda {venda.id}, ignorando na NFC-e: '{venda.cliente.documento}'")
         
         # Recalcula total real dos itens para o XML
         total_xml = 0
