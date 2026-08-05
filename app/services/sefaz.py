@@ -1,4 +1,4 @@
-import os, io, binascii, re, hashlib, tempfile, requests
+import os, io, binascii, re, hashlib, tempfile, requests, traceback
 os.environ["OPENSSL_CONF"] = "/app/openssl_legacy.cnf"
 from lxml import etree
 from sqlalchemy.orm import Session, joinedload
@@ -8,6 +8,7 @@ from cryptography.hazmat.backends import default_backend
 from app.models.venda import Venda, VendaItem
 from app.models.nota_fiscal import NotaFiscal as NotaFiscalModel
 from app.models.empresa import Empresa
+from app.core.logging import logger
 
 class SefazService:
     @staticmethod
@@ -100,21 +101,26 @@ class SefazService:
         if not nota:
             nota = NotaFiscalModel(venda_id=venda.id, status_sefaz="PENDENTE", motivo_sefaz="Iniciando")
             db.add(nota); db.commit(); db.refresh(nota)
-        
-        logs = f"[{datetime.now().isoformat()}] INICIO: Emissão Venda {venda.id}\n"
+
+        logs = [f"[{datetime.now().isoformat()}] INICIO: Emissão Venda {venda.id}"]
         empresa = db.query(Empresa).first()
         db.refresh(empresa)
-        
+        logs.append(f"[{datetime.now().isoformat()}] Empresa carregada: CNPJ={empresa.cnpj}, ambiente={empresa.ambiente}, ultimo_numero_nf={empresa.ultimo_numero_nf}")
+
         try:
             numero_nf = (empresa.ultimo_numero_nf or 0) + 1
             dh_ref = datetime.now(timezone(timedelta(hours=-3)))
             chave_base = f"35{dh_ref.strftime('%y%m')}{empresa.cnpj.zfill(14)}65001{str(numero_nf).zfill(9)}1{str(numero_nf).zfill(8)}"
             dv = SefazService.calcular_dv(chave_base); chave = chave_base + str(dv)
+            logs.append(f"[{datetime.now().isoformat()}] Chave de acesso gerada: {chave}")
             
-            with open(os.path.join("storage/certs", os.path.basename(empresa.certificado_path)), "rb") as f: pfx_data = f.read()
+            cert_path = os.path.join("storage/certs", os.path.basename(empresa.certificado_path))
+            logs.append(f"[{datetime.now().isoformat()}] Lendo certificado: {cert_path}")
+            with open(cert_path, "rb") as f: pfx_data = f.read()
             pw = (empresa.certificado_senha or "").strip().encode('utf-8')
             
             xml_puro = SefazService._gerar_xml_limpo(empresa, venda, chave, numero_nf)
+            logs.append(f"[{datetime.now().isoformat()}] XML puro gerado ({len(xml_puro)} caracteres)")
             
             from erpbrasil.assinatura.assinatura import XMLSignerWithSHA1
             import signxml
@@ -125,12 +131,17 @@ class SefazService:
             signer = XMLSignerWithSHA1(method=signxml.methods.enveloped, signature_algorithm="rsa-sha1", digest_algorithm="sha1", c14n_algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315")
             signer.namespaces = {None: signxml.namespaces.ds}
             signed_root = signer.sign(root, key=pkey, cert=pcert.public_bytes(Encoding.PEM), reference_uri=f"#NFe{chave}")
+            logs.append(f"[{datetime.now().isoformat()}] XML assinado com sucesso")
             
             xml_assinado = etree.tostring(signed_root, encoding='unicode')
             xml_assinado = xml_assinado.replace(' xmlns="http://www.portalfiscal.inf.br/nfe"', '').replace('<NFe', '<NFe xmlns="http://www.portalfiscal.inf.br/nfe"', 1)
             xml_assinado = re.sub(r'<\?xml.*?\?>', '', xml_assinado).strip()
 
+            # Salva xml_enviado ANTES da chamada SEFAZ para estar disponivel mesmo em caso de timeout
+            nota.xml_enviado = xml_assinado
+
             url_s = "https://nfce.fazenda.sp.gov.br/ws/nfeautorizacao4.asmx" if empresa.ambiente == 1 else "https://homologacao.nfce.fazenda.sp.gov.br/ws/nfeautorizacao4.asmx"
+            logs.append(f"[{datetime.now().isoformat()}] Enviando para SEFAZ: {url_s}")
             lote_xml = f'<enviNFe xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00"><idLote>{venda.id}</idLote><indSinc>1</indSinc>{xml_assinado}</enviNFe>'
             env = f'<?xml version="1.0" encoding="utf-8"?><soap12:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap12="http://www.w3.org/2003/05/soap-envelope"><soap12:Body><nfeDadosMsg xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeAutorizacao4">{lote_xml}</nfeDadosMsg></soap12:Body></soap12:Envelope>'
             
@@ -140,8 +151,9 @@ class SefazService:
                 for ot in others: cert_pem += ot.public_bytes(Encoding.PEM)
                 ct.write(cert_pem); ct.close(); kt.write(pkey.private_bytes(Encoding.PEM, PrivateFormat.TraditionalOpenSSL, NoEncryption())); kt.close()
                 res = requests.post(url=url_s, data=env.encode('utf-8'), headers={"Content-Type": "application/soap+xml; charset=utf-8"}, cert=(ct.name, kt.name), verify=False, timeout=30)
+                logs.append(f"[{datetime.now().isoformat()}] Resposta SEFAZ recebida ({len(res.text)} caracteres, HTTP {res.status_code})")
                 
-                nota.xml_enviado, nota.xml_recebido = xml_assinado, res.text
+                nota.xml_recebido = res.text
                 if any(x in res.text for x in ["<cStat>100</cStat>", "<cStat>102</cStat>", "<cStat>204</cStat>"]):
                     nota.status_sefaz, nota.motivo_sefaz = "100", "Autorizado"
                     n_prot = re.search(r"<nProt>(.*?)</nProt>", res.text)
@@ -155,14 +167,27 @@ class SefazService:
                     pm = re.search(r"<protNFe.*?>(.*?)</protNFe>", res.text, re.DOTALL)
                     if pm: nota.xml_autorizado = f'<?xml version="1.0" encoding="utf-8"?><nfeProc xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00">{xml_assinado}{pm.group(0)}</nfeProc>'
                     venda.status = "PAGA"; db.add(venda)
+                    logs.append(f"[{datetime.now().isoformat()}] AUTORIZADO: protocolo={nota.protocolo}")
                 else:
                     m = re.search(r"<xMotivo>(.*?)</xMotivo>", res.text)
                     nota.status_sefaz, nota.motivo_sefaz = "ERRO", m.group(1) if m else "Rejeição"
+                    logs.append(f"[{datetime.now().isoformat()}] REJEITADO: {nota.motivo_sefaz}")
             finally:
                 [os.remove(x) for x in [ct.name, kt.name] if os.path.exists(x)]
-            db.commit(); return nota
+            
+            nota.logs_transmissao = "\n".join(logs)
+            db.commit()
+            logger.info(f"SEFAZ EMISSAO VENDA {venda.id}: status={nota.status_sefaz}, motivo={nota.motivo_sefaz}")
+            return nota
         except Exception as e:
-            db.rollback(); raise e
+            error_msg = f"{type(e).__name__}: {str(e)}"
+            logs.append(f"[{datetime.now().isoformat()}] EXCEPTION: {error_msg}")
+            logs.append(traceback.format_exc())
+            nota.logs_transmissao = "\n".join(logs)
+            nota.motivo_sefaz = error_msg[:250]
+            db.commit()
+            logger.error(f"SEFAZ EMISSAO FALHOU VENDA {venda.id}: {error_msg}")
+            raise e
 
     @staticmethod
     def cancelar_nfce(db: Session, venda_id: int, justificativa: str):
