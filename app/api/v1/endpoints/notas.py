@@ -1,4 +1,4 @@
-import os
+import os, socket, ssl, time
 from fastapi import APIRouter, Depends, HTTPException, status, Response
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -186,5 +186,61 @@ def get_xml_log(
         "xml_autorizado": nota.xml_autorizado,
         "logs": nota.logs_transmissao
     }
+
+@router.get("/diagnostico/sefaz")
+def diagnosticar_sefaz(
+    current_user: Usuario = Depends(get_current_gerente)
+):
+    """Diagnostico de conectividade com a SEFAZ SP."""
+    host_prod = "nfce.fazenda.sp.gov.br"
+    host_homol = "homologacao.nfce.fazenda.sp.gov.br"
+    port = 443
+    resultados = {}
+
+    for label, host in [("producao", host_prod), ("homologacao", host_homol)]:
+        r = {"host": host, "erros": []}
+        # DNS
+        try:
+            ip = socket.gethostbyname(host)
+            r["dns"] = ip
+        except Exception as e:
+            r["dns"] = f"FALHA: {e}"
+            r["erros"].append(f"DNS: {e}")
+
+        # TCP connect
+        try:
+            start = time.time()
+            sock = socket.create_connection((host, port), timeout=10)
+            r["tcp"] = f"OK ({((time.time()-start)*1000):.0f}ms)"
+            sock.close()
+        except Exception as e:
+            r["tcp"] = f"FALHA: {e}"
+            r["erros"].append(f"TCP: {e}")
+
+        # TLS handshake
+        try:
+            ctx = ssl.create_default_context()
+            start = time.time()
+            with ctx.wrap_socket(socket.create_connection((host, port), timeout=10), server_hostname=host) as s:
+                r["tls"] = f"OK ({((time.time()-start)*1000):.0f}ms)"
+                r["tls_version"] = s.version()
+        except Exception as e:
+            r["tls"] = f"FALHA: {e}"
+            r["erros"].append(f"TLS: {e}")
+
+        # HTTP 200 no /ws/
+        try:
+            import urllib.request
+            start = time.time()
+            req = urllib.request.Request(f"https://{host}/ws/", headers={"User-Agent": "Mozilla/5.0"})
+            resp = urllib.request.urlopen(req, timeout=10)
+            r["http"] = f"HTTP {resp.status} ({((time.time()-start)*1000):.0f}ms)"
+        except Exception as e:
+            r["http"] = f"FALHA: {e}"
+            r["erros"].append(f"HTTP: {e}")
+
+        resultados[label] = r
+
+    return {"status": "ok", "resultados": resultados, "timestamp": datetime.now().isoformat()}
 
 
