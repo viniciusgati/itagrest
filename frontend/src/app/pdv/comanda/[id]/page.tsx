@@ -113,14 +113,44 @@ export default function ComandaMobilePage() {
     } catch (err) { console.error(err) }
   }
 
+  const validarCpfCnpj = (doc: string): { tipo: 'CPF' | 'CNPJ'; limpo: string } | null => {
+    const limpo = doc.replace(/\D/g, '')
+    if (limpo.length === 11 && !/^(\d)\1{10}$/.test(limpo)) {
+      const calc = (nums: string, mult: number) => {
+        const s = nums.split('').reduce((a, d, i) => a + parseInt(d) * (mult - i), 0)
+        const r = (s * 10) % 11
+        return r === 10 ? 0 : r
+      }
+      if (calc(limpo.slice(0, 9), 10) === parseInt(limpo[9]) && calc(limpo.slice(0, 10), 11) === parseInt(limpo[10]))
+        return { tipo: 'CPF', limpo }
+    }
+    if (limpo.length === 14) {
+      const calc = (nums: string, pesos: number[]) => {
+        const s = nums.split('').reduce((a, d, i) => a + parseInt(d) * pesos[i], 0)
+        const r = s % 11
+        return r < 2 ? 0 : 11 - r
+      }
+      const p1 = [5,4,3,2,9,8,7,6,5,4,3,2]
+      const p2 = [6,5,4,3,2,9,8,7,6,5,4,3,2]
+      if (calc(limpo.slice(0, 12), p1) === parseInt(limpo[12]) && calc(limpo.slice(0, 13), p2) === parseInt(limpo[13]))
+        return { tipo: 'CNPJ', limpo }
+    }
+    return null
+  }
+
   const handleVincularCliente = async (clienteId?: number, clienteObj?: any) => {
     if (!clienteId && (!clienteDoc || isSearchingCliente)) return
+    const cleanDoc = clienteDoc.replace(/\D/g, '')
+    const validado = validarCpfCnpj(clienteDoc)
+    if (!validado) {
+      alert('CPF ou CNPJ inválido. Verifique o número digitado.')
+      return
+    }
     setIsSearchingCliente(true)
     try {
       let finalCliente = clienteObj
       
       if (!clienteId) {
-        const cleanDoc = clienteDoc.replace(/\D/g, '')
         try {
           const res = await api.get(`/clientes/buscar-doc/${cleanDoc}`)
           finalCliente = res.data
@@ -274,7 +304,7 @@ export default function ComandaMobilePage() {
           <h1 className="font-black text-slate-900 dark:text-white uppercase tracking-tighter text-xl">Mesa {id}</h1>
           <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">{venda?.status}</p>
         </div>
-        <button onClick={() => setShowClienteSearch(true)} className="flex items-center gap-2">
+        <button onClick={() => { setShowClienteSearch(true); setJustLinked(false); }} className="flex items-center gap-2">
           {clienteEncontrado && (
             <div className="text-right hidden sm:block">
               <p className="text-[9px] font-black text-brand-600 uppercase leading-none">Cliente</p>
@@ -450,7 +480,7 @@ export default function ComandaMobilePage() {
                       </div>
                       {!clienteEncontrado && (
                         <button 
-                          onClick={() => { setShowCheckout(false); setShowClienteSearch(true); }}
+                          onClick={() => { setShowCheckout(false); setShowClienteSearch(true); setJustLinked(false); }}
                           className="text-[10px] font-black text-brand-600 uppercase underline"
                         >
                           Identificar
@@ -641,7 +671,7 @@ export default function ComandaMobilePage() {
                {!isSearchingCliente && !justLinked && (
                  <div className="grid grid-cols-2 gap-3">
                    <button 
-                    onClick={() => { setShowNomeSearch(false); setShowClienteSearch(true); }}
+                    onClick={() => { setShowNomeSearch(false); setShowClienteSearch(true); setJustLinked(false); }}
                     className="py-4 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-2xl font-black uppercase tracking-widest text-[10px]"
                    >
                      CPF/CNPJ
