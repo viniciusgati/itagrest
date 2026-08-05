@@ -1,5 +1,7 @@
 'use client'
 
+console.log('[itagrest] pdv v250805-2')
+
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { 
