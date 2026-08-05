@@ -35,6 +35,8 @@ export default function ComandaMobilePage() {
   const [showClienteSearch, setShowClienteSearch] = useState(false)
   const [showNomeSearch, setShowNomeSearch] = useState(false)
   const [clienteDoc, setClienteDoc] = useState('')
+  const [erroDoc, setErroDoc] = useState('')
+  const [shakeDoc, setShakeDoc] = useState(false)
   const [nomeQuery, setNomeQuery] = useState('')
   const [sugestoes, setSugestoes] = useState<any[]>([])
   const [clienteEncontrado, setClienteEncontrado] = useState<any>(null)
@@ -145,9 +147,12 @@ export default function ComandaMobilePage() {
     const cleanDoc = clienteDoc.replace(/\D/g, '')
     const validado = validarCpfCnpj(clienteDoc)
     if (!validado) {
-      alert('CPF ou CNPJ inválido. Verifique o número digitado.')
+      setErroDoc('CPF ou CNPJ inválido')
+      setShakeDoc(true)
+      setTimeout(() => setShakeDoc(false), 500)
       return
     }
+    setErroDoc('')
     setIsSearchingCliente(true)
     try {
       let finalCliente = clienteObj
@@ -556,17 +561,21 @@ export default function ComandaMobilePage() {
                  </p>
                </div>
 
-               <div className="relative">
-                 <input 
-                  type="text" 
-                  disabled={isSearchingCliente || justLinked}
-                  placeholder="000.000.000-00" 
-                  className="w-full px-6 py-5 bg-slate-50 dark:bg-slate-900 dark:text-white rounded-2xl outline-none font-black text-center text-lg placeholder:text-slate-300 transition-all focus:ring-4 focus:ring-brand-500/10" 
-                  value={clienteDoc} 
-                  onChange={e => setClienteDoc(e.target.value)} 
-                  onKeyDown={e => e.key === 'Enter' && handleVincularCliente()}
-                 />
-               </div>
+                <div className="relative">
+                  <input 
+                   type="text" 
+                   disabled={isSearchingCliente || justLinked}
+                   placeholder="000.000.000-00" 
+                   className={`w-full px-6 py-5 bg-slate-50 dark:bg-slate-900 dark:text-white rounded-2xl outline-none font-black text-center text-lg placeholder:text-slate-300 transition-all focus:ring-4 focus:ring-brand-500/10 ${erroDoc ? 'bg-red-50 dark:bg-red-950/20 border-2 border-red-400 text-red-600 placeholder:text-red-300' : ''}`}
+                   style={shakeDoc ? { animation: 'shake 0.4s ease-in-out' } : undefined}
+                   value={clienteDoc} 
+                   onChange={e => { setClienteDoc(e.target.value); setErroDoc(''); }} 
+                   onKeyDown={e => e.key === 'Enter' && handleVincularCliente()}
+                  />
+                  {erroDoc && (
+                    <p className="text-red-500 text-xs font-bold mt-2 text-center">{erroDoc}</p>
+                  )}
+                </div>
 
                <div className="flex flex-col gap-3">
                  <button 
