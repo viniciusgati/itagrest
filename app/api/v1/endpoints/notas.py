@@ -1,4 +1,4 @@
-import os, socket, ssl, time
+import os, socket, ssl, time, re, requests
 from fastapi import APIRouter, Depends, HTTPException, status, Response
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -189,6 +189,7 @@ def get_xml_log(
 
 @router.get("/diagnostico/sefaz")
 def diagnosticar_sefaz(
+    db: Session = Depends(get_db),
     current_user: Usuario = get_current_gerente
 ):
     """Diagnostico de conectividade com a SEFAZ SP."""
@@ -199,7 +200,6 @@ def diagnosticar_sefaz(
 
     for label, host in [("producao", host_prod), ("homologacao", host_homol)]:
         r = {"host": host, "erros": []}
-        # DNS
         try:
             ip = socket.gethostbyname(host)
             r["dns"] = ip
@@ -207,7 +207,6 @@ def diagnosticar_sefaz(
             r["dns"] = f"FALHA: {e}"
             r["erros"].append(f"DNS: {e}")
 
-        # TCP connect
         try:
             start = time.time()
             sock = socket.create_connection((host, port), timeout=10)
@@ -217,7 +216,6 @@ def diagnosticar_sefaz(
             r["tcp"] = f"FALHA: {e}"
             r["erros"].append(f"TCP: {e}")
 
-        # TLS handshake
         try:
             ctx = ssl.create_default_context()
             start = time.time()
@@ -228,18 +226,67 @@ def diagnosticar_sefaz(
             r["tls"] = f"FALHA: {e}"
             r["erros"].append(f"TLS: {e}")
 
-        # HTTP 200 no /ws/
-        try:
-            import urllib.request
-            start = time.time()
-            req = urllib.request.Request(f"https://{host}/ws/", headers={"User-Agent": "Mozilla/5.0"})
-            resp = urllib.request.urlopen(req, timeout=10)
-            r["http"] = f"HTTP {resp.status} ({((time.time()-start)*1000):.0f}ms)"
-        except Exception as e:
-            r["http"] = f"FALHA: {e}"
-            r["erros"].append(f"HTTP: {e}")
-
         resultados[label] = r
+
+    # Teste real: exatamente como a emissao faz, com certificado digital
+    try:
+        import tempfile
+        from app.models.empresa import Empresa
+        from cryptography.hazmat.primitives.serialization import pkcs12, Encoding, PrivateFormat, NoEncryption
+        from cryptography.hazmat.backends import default_backend
+
+        empresa = db.query(Empresa).first()
+        if not empresa or not empresa.certificado_path:
+            resultados["certificado"] = {"status": "FALHA", "erro": "Empresa nao configurada ou sem certificado"}
+        else:
+            cert_path = os.path.join("storage/certs", os.path.basename(empresa.certificado_path))
+            resultados["certificado"] = {"path": cert_path, "cnpj": empresa.cnpj, "ambiente": empresa.ambiente}
+
+            try:
+                with open(cert_path, "rb") as f:
+                    pfx_data = f.read()
+                pw = (empresa.certificado_senha or "").strip().encode("utf-8")
+                p12 = pkcs12.load_key_and_certificates(pfx_data, pw, default_backend())
+                pkey, pcert, others = (p12[0], p12[1], p12[2]) if isinstance(p12, tuple) else (p12.key, p12.cert, p12.othercerts)
+                resultados["certificado"]["validade"] = str(pcert.not_valid_after_utc)
+                resultados["certificado"]["status"] = "OK"
+
+                # Testa POST com requests + certificado (igual a emissao real)
+                url_s = "https://nfce.fazenda.sp.gov.br/ws/nfeautorizacao4.asmx" if empresa.ambiente == 1 else "https://homologacao.nfce.fazenda.sp.gov.br/ws/nfeautorizacao4.asmx"
+                env = f'<?xml version="1.0" encoding="utf-8"?><soap12:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap12="http://www.w3.org/2003/05/soap-envelope"><soap12:Body><nfeDadosMsg xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeAutorizacao4"><enviNFe xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00"><idLote>999999</idLote><indSinc>0</indSinc></enviNFe></nfeDadosMsg></soap12:Body></soap12:Envelope>'
+
+                ct, kt = tempfile.NamedTemporaryFile(delete=False), tempfile.NamedTemporaryFile(delete=False)
+                try:
+                    cert_pem = pcert.public_bytes(Encoding.PEM)
+                    for ot in others:
+                        cert_pem += ot.public_bytes(Encoding.PEM)
+                    ct.write(cert_pem); ct.close()
+                    kt.write(pkey.private_bytes(Encoding.PEM, PrivateFormat.TraditionalOpenSSL, NoEncryption())); kt.close()
+
+                    start = time.time()
+                    res = requests.post(url=url_s, data=env.encode("utf-8"),
+                        headers={"Content-Type": "application/soap+xml; charset=utf-8"},
+                        cert=(ct.name, kt.name), verify=False, timeout=15)
+                    elapsed = (time.time() - start) * 1000
+                    resultados["emissao_teste"] = {
+                        "url": url_s,
+                        "tempo_ms": f"{elapsed:.0f}",
+                        "http_status": res.status_code,
+                        "resposta_tamanho": len(res.text),
+                    }
+                    if "<cStat>" in res.text:
+                        cstat = re.search(r"<cStat>(\d+)</cStat>", res.text)
+                        xmotivo = re.search(r"<xMotivo>(.*?)</xMotivo>", res.text)
+                        resultados["emissao_teste"]["cStat"] = cstat.group(1) if cstat else "N/A"
+                        resultados["emissao_teste"]["xMotivo"] = xmotivo.group(1) if xmotivo else "N/A"
+                    resultados["emissao_teste"]["status"] = "OK"
+                finally:
+                    for x in [ct.name, kt.name]:
+                        if os.path.exists(x): os.remove(x)
+            except Exception as e:
+                resultados["certificado"]["status"] = f"FALHA: {type(e).__name__}: {str(e)}"
+    except Exception as e:
+        resultados["certificado"] = {"status": "FALHA", "erro": f"{type(e).__name__}: {str(e)}"}
 
     return {"status": "ok", "resultados": resultados, "timestamp": datetime.now().isoformat()}
 
