@@ -189,7 +189,7 @@ def get_xml_log(
 
 @router.get("/diagnostico/sefaz")
 def diagnosticar_sefaz(
-    current_user: Usuario = Depends(get_current_gerente)
+    current_user: Usuario = get_current_gerente
 ):
     """Diagnostico de conectividade com a SEFAZ SP."""
     host_prod = "nfce.fazenda.sp.gov.br"
