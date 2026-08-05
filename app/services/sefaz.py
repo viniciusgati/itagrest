@@ -1,4 +1,4 @@
-import os, io, binascii, re, hashlib, tempfile, requests, traceback
+import os, io, binascii, re, hashlib, tempfile, requests, traceback, time
 os.environ["OPENSSL_CONF"] = "/app/openssl_legacy.cnf"
 from lxml import etree
 from sqlalchemy.orm import Session, joinedload
@@ -150,8 +150,23 @@ class SefazService:
                 cert_pem = pcert.public_bytes(Encoding.PEM)
                 for ot in others: cert_pem += ot.public_bytes(Encoding.PEM)
                 ct.write(cert_pem); ct.close(); kt.write(pkey.private_bytes(Encoding.PEM, PrivateFormat.TraditionalOpenSSL, NoEncryption())); kt.close()
-                res = requests.post(url=url_s, data=env.encode('utf-8'), headers={"Content-Type": "application/soap+xml; charset=utf-8"}, cert=(ct.name, kt.name), verify=False, timeout=30)
-                logs.append(f"[{datetime.now().isoformat()}] Resposta SEFAZ recebida ({len(res.text)} caracteres, HTTP {res.status_code})")
+                
+                res = None
+                last_error = None
+                for tentativa in range(3):
+                    try:
+                        logs.append(f"[{datetime.now().isoformat()}] Tentativa {tentativa+1}/3 de envio para SEFAZ")
+                        res = requests.post(url=url_s, data=env.encode('utf-8'), headers={"Content-Type": "application/soap+xml; charset=utf-8"}, cert=(ct.name, kt.name), verify=False, timeout=30)
+                        logs.append(f"[{datetime.now().isoformat()}] Resposta SEFAZ recebida ({len(res.text)} caracteres, HTTP {res.status_code})")
+                        break
+                    except (requests.exceptions.ConnectTimeout, requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
+                        last_error = e
+                        logs.append(f"[{datetime.now().isoformat()}] Tentativa {tentativa+1}/3 FALHOU: {type(e).__name__}: {str(e)[:200]}")
+                        if tentativa < 2:
+                            time.sleep(2 * (tentativa + 1))
+                            logs.append(f"[{datetime.now().isoformat()}] Aguardando {2*(tentativa+1)}s antes da retentativa...")
+                if res is None and last_error:
+                    raise last_error
                 
                 nota.xml_recebido = res.text
                 if any(x in res.text for x in ["<cStat>100</cStat>", "<cStat>102</cStat>", "<cStat>204</cStat>"]):

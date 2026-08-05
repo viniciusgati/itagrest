@@ -439,11 +439,21 @@ export default function NotaFiscalDetailPage() {
 function TimelineLogs({ nota }: { nota: any }) {
   const eventos = parseEventosSefaz(nota?.xml_recebido)
 
-  if (eventos.length === 0) {
+  if (eventos.length === 0 && !nota?.logs_transmissao) {
     return (
       <div className="flex flex-col items-center justify-center gap-4 py-16 text-slate-400">
         <Clock className="w-12 h-12" />
         <p className="font-bold text-sm">Nenhuma comunicação com a SEFAZ ainda.</p>
+      </div>
+    )
+  }
+
+  if (!nota?.xml_recebido && nota?.logs_transmissao) {
+    return (
+      <div className="space-y-4">
+        <pre className="font-mono text-[10px] p-6 rounded-3xl border overflow-x-auto text-slate-700 dark:text-slate-300 bg-slate-50/50 dark:bg-slate-900/10 border-slate-200 dark:border-slate-700 whitespace-pre-wrap break-all">
+          {nota.logs_transmissao}
+        </pre>
       </div>
     )
   }
